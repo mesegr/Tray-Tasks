@@ -29,4 +29,4 @@ D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\Gest
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\ref\GestorTareas.dll
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\TareasBandeja.Views.NotificationPopup.resources
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\GestorTareas.csproj.GenerateResource.cache
-D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\GestorTa.E283C1ED.Up2Date
+D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\bin\Debug\net10.0-windows\Sounds\notification.mp3

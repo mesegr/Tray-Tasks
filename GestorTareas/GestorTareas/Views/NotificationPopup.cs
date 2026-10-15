@@ -1,5 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Media;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace TareasBandeja.Views;
 
@@ -70,7 +72,7 @@ internal sealed class NotificationPopup : Form
         animacion.Interval = 15;
         animacion.Tick += Mover;
         cierre.Tick += (_, _) => CerrarAnimado();
-        Shown += (_, _) => { if (reproducirSonido) SystemSounds.Exclamation.Play(); };
+        Shown += (_, _) => { if (reproducirSonido) NotificationSound.Play(); };
     }
 
     public void PrepararEntrada()
@@ -129,6 +131,102 @@ internal sealed class NotificationPopup : Form
     {
         if (disposing) { animacion.Dispose(); cierre.Dispose(); }
         base.Dispose(disposing);
+    }
+}
+
+/// <summary>
+/// Chime corto generado por la aplicación, independiente de los sonidos de Windows.
+/// </summary>
+internal static class NotificationSound
+{
+    private const string Alias = "TareasBandejaNotification";
+    private static readonly string rutaMp3 = Path.Combine(AppContext.BaseDirectory, "Sounds", "notification.mp3");
+    private static readonly MemoryStream audio = new(CrearWav());
+    private static readonly SoundPlayer reproductor = CrearReproductor();
+
+    [DllImport("winmm.dll", CharSet = CharSet.Unicode)]
+    private static extern int mciSendString(
+        string command,
+        StringBuilder? returnValue,
+        int returnValueLength,
+        IntPtr callback);
+
+    public static void Play()
+    {
+        try
+        {
+            if (!File.Exists(rutaMp3)) return;
+
+            // MCI permite reproducir MP3 sin añadir librerías externas al proyecto.
+            mciSendString($"close {Alias}", null, 0, IntPtr.Zero);
+            mciSendString($"open \"{rutaMp3}\" type mpegvideo alias {Alias}", null, 0, IntPtr.Zero);
+            mciSendString($"play {Alias}", null, 0, IntPtr.Zero);
+        }
+        catch
+        {
+            // Una notificación nunca debe fallar porque el dispositivo de audio no esté disponible.
+        }
+    }
+
+    private static SoundPlayer CrearReproductor()
+    {
+        var player = new SoundPlayer(audio);
+        player.Load();
+        return player;
+    }
+
+    private static byte[] CrearWav()
+    {
+        const int sampleRate = 44100;
+        const int duracion = 560;
+        int muestras = sampleRate * duracion / 1000;
+        var datos = new byte[muestras * 2];
+
+        // Arpegio ascendente suave: Do, Mi, Sol y Do agudo.
+        (double frecuencia, double inicio, double fin)[] notas =
+        {
+            (523.25, 0.00, 0.26),
+            (659.25, 0.09, 0.35),
+            (783.99, 0.18, 0.44),
+            (1046.50, 0.28, 0.56)
+        };
+
+        using var contenido = new MemoryStream();
+        using (var writer = new BinaryWriter(contenido, Encoding.ASCII, leaveOpen: true))
+        {
+            writer.Write(Encoding.ASCII.GetBytes("RIFF"));
+            writer.Write(36 + datos.Length);
+            writer.Write(Encoding.ASCII.GetBytes("WAVEfmt "));
+            writer.Write(16);
+            writer.Write((short)1);
+            writer.Write((short)1);
+            writer.Write(sampleRate);
+            writer.Write(sampleRate * 2);
+            writer.Write((short)2);
+            writer.Write((short)16);
+            writer.Write(Encoding.ASCII.GetBytes("data"));
+            writer.Write(datos.Length);
+
+            for (int i = 0; i < muestras; i++)
+            {
+                double tiempo = (double)i / sampleRate;
+                double valor = 0;
+
+                foreach (var nota in notas)
+                {
+                    if (tiempo < nota.inicio || tiempo >= nota.fin) continue;
+
+                    double transcurrido = tiempo - nota.inicio;
+                    double envolvente = Math.Min(1, transcurrido / 0.012) * Math.Exp(-transcurrido * 5.2);
+                    valor += Math.Sin(2 * Math.PI * nota.frecuencia * transcurrido) * envolvente * 0.22;
+                }
+
+                short muestra = (short)(Math.Clamp(valor, -1, 1) * short.MaxValue);
+                writer.Write(muestra);
+            }
+        }
+
+        return contenido.ToArray();
     }
 }
 

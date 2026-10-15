@@ -869,7 +869,8 @@ public class MainForm : Form
         calendario.TieneTareas = controller.TieneTareas;
         calendario.Visible = false;
 
-        panelEdicion.Bounds = new Rectangle(tarjeta.Left, tarjeta.Top, tarjeta.Width, S(304));
+        panelEdicion.Bounds = new Rectangle(tarjeta.Left, tarjeta.Top, tarjeta.Width,
+            Math.Max(S(320), alturaVentanaNormal - tarjeta.Top - margen));
         panelEdicion.Radius = Ui.RadioEsquina;
         panelEdicion.Visible = false;
         panelEdicion.Guardado += (_, tareaEditada) =>
@@ -1031,7 +1032,11 @@ public class MainForm : Form
             int i = lista.IndexFromPoint(e.Location);
             if (i != hover) { hover = i; lista.Invalidate(); }
         };
-        lista.MouseLeave += (s, e) => { hover = -1; lista.Invalidate(); };
+        lista.MouseLeave += (s, e) =>
+        {
+            hover = -1;
+            lista.Invalidate();
+        };
         lista.MouseDown += Lista_MouseDown;
         lista.DoubleClick += Lista_DoubleClick;
         ConfigurarMenuTareas();
@@ -1310,19 +1315,40 @@ public class MainForm : Form
         var (sub, colorSub) = Subtitulo(t, destacada);
         int opacidad = opacidadesFilas.GetValueOrDefault(t.Id, 255);
         Color colorTitulo = Mezclar(Ui.Tarjeta, t.Hecha ? Ui.Gris : Ui.Texto, opacidad);
-        if (sub == null)
+        bool mostrandoAyuda = e.Index == hover;
+        if (sub == null && !mostrandoAyuda)
         {
             TextRenderer.DrawText(g, t.Titulo, fNormal, new Rectangle(xTexto, r.Top, anchoTexto, r.Height), colorTitulo, flags);
         }
         else
         {
             TextRenderer.DrawText(g, t.Titulo, fNormal, new Rectangle(xTexto, r.Top + S(6), anchoTexto, S(24)), colorTitulo, flags);
-            TextRenderer.DrawText(g, sub, fSub, new Rectangle(xTexto, r.Top + S(28), anchoTexto, S(18)), colorSub, flags);
+            var lineaSecundaria = new Rectangle(xTexto, r.Top + S(28), anchoTexto, S(18));
+            if (mostrandoAyuda)
+            {
+                const string ayuda = "Doble clic para editar";
+                int anchoAyuda = Math.Min(S(124), lineaSecundaria.Width);
+                var areaAyuda = new Rectangle(lineaSecundaria.Left, lineaSecundaria.Top,
+                    anchoAyuda, lineaSecundaria.Height);
+                TextRenderer.DrawText(g, ayuda, fSub, areaAyuda, Ui.Gris,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+
+                if (sub != null)
+                {
+                    lineaSecundaria.X += anchoAyuda + S(8);
+                    lineaSecundaria.Width = Math.Max(0, lineaSecundaria.Width - anchoAyuda - S(8));
+                    TextRenderer.DrawText(g, sub, fSub, lineaSecundaria, colorSub, flags);
+                }
+            }
+            else if (sub != null)
+                TextRenderer.DrawText(g, sub, fSub, lineaSecundaria, colorSub, flags);
         }
         if (t.Hecha)
         {
             var tituloTamano = TextRenderer.MeasureText(t.Titulo, fNormal, new Size(anchoTexto, S(24)), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
-            float yTachado = sub == null ? r.Top + r.Height / 2f : r.Top + S(18);
+            float yTachado = sub == null && !mostrandoAyuda
+                ? r.Top + r.Height / 2f
+                : r.Top + S(18);
             using var tachado = new Pen(Ui.Gris, Math.Max(1f, Sf(1f)));
             g.DrawLine(tachado, xTexto, yTachado, xTexto + Math.Min(anchoTexto, tituloTamano.Width), yTachado);
         }

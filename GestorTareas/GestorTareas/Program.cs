@@ -16,7 +16,7 @@ public class Tarea
     public bool ConHora { get; set; }
     public bool Importante { get; set; }                   // las importantes salen todos los días hasta que se hagan
     public DateTime Creada { get; set; } = DateTime.Today;
-    public bool Hecha { get; set; }
+    public bool Hecha { get; set; }                        // ya no se usa; se mantiene solo para leer tareas antiguas
 }
 
 // ---------- Programa ----------
@@ -517,7 +517,6 @@ public class MainForm : Form
     readonly System.Windows.Forms.Timer reloj = new();
 
     readonly Font fNormal = new("Segoe UI", 11f);
-    readonly Font fHecha = new("Segoe UI", 11f, FontStyle.Strikeout);
     readonly Font fSub = new("Segoe UI", 8.5f);
 
     readonly float k;   // factor de escala según el zoom de Windows (100% = 1, 150% = 1.5...)
@@ -526,7 +525,6 @@ public class MainForm : Form
 
     Icon? iconoActual;
     DateTime ultimoDia = DateTime.Today;
-    DateTime ocultadoEn = DateTime.MinValue;
     int hover = -1;
     bool salir;
     bool primeraVez = true;
@@ -675,13 +673,11 @@ public class MainForm : Form
         menu.Items.Add("Abrir", null, (s, e) => BeginInvoke(new Action(Mostrar)));
         menu.Items.Add("Salir", null, (s, e) => { salir = true; tray.Visible = false; Application.Exit(); });
         tray.ContextMenuStrip = menu;
+        // Clic en el icono: abre el panel; otro clic en el icono: lo cierra
         tray.MouseClick += (s, e) =>
         {
             if (e.Button != MouseButtons.Left) return;
-            if (Visible) { Hide(); return; }
-            // Si acaba de ocultarse porque el clic en el icono le quitó el foco, no lo reabrimos
-            if ((DateTime.UtcNow - ocultadoEn).TotalMilliseconds < 300) return;
-            Mostrar();
+            if (Visible) Hide(); else Mostrar();
         };
 
         // --- Datos ---
@@ -724,9 +720,7 @@ public class MainForm : Form
 
         KeyDown += (s, e) =>
         {
-            if (e.KeyCode != Keys.Escape) return;
-            if (calendario.Visible) calendario.Visible = false;
-            else Hide();
+            if (e.KeyCode == Keys.Escape && calendario.Visible) calendario.Visible = false;
         };
 
         // Cada minuto comprueba si ha cambiado el día (medianoche)
@@ -778,17 +772,6 @@ public class MainForm : Form
         {
             using var path = Ui.RoundedRect(new Rectangle(0, 0, Width, Height), S(14));
             Region = new Region(path);
-        }
-    }
-
-    // Como un popover de iOS: se oculta al hacer clic fuera
-    protected override void OnDeactivate(EventArgs e)
-    {
-        base.OnDeactivate(e);
-        if (Visible)
-        {
-            Hide();
-            ocultadoEn = DateTime.UtcNow;
         }
     }
 
@@ -881,59 +864,39 @@ public class MainForm : Form
         if (e.Index < visibles.Count - 1)
         {
             using var sep = new Pen(Ui.Separador, 1f);
-            g.DrawLine(sep, r.Left + S(48), r.Bottom - 1, r.Right - S(12), r.Bottom - 1);
+            g.DrawLine(sep, r.Left + S(32), r.Bottom - 1, r.Right - S(12), r.Bottom - 1);
         }
 
-        // Círculo (vacío, naranja si es importante, o azul con check si está hecha)
-        int circ = S(22);
-        var c = new Rectangle(r.Left + S(14), r.Top + (r.Height - circ) / 2, circ, circ);
-        if (t.Hecha)
-        {
-            using var relleno = new SolidBrush(Ui.Azul);
-            g.FillEllipse(relleno, c);
-            using var pen = new Pen(Color.White, Sf(2f))
-            {
-                StartCap = LineCap.Round,
-                EndCap = LineCap.Round,
-                LineJoin = LineJoin.Round
-            };
-            g.DrawLines(pen, new[]
-            {
-                new PointF(c.X + c.Width * 0.27f, c.Y + c.Height * 0.50f),
-                new PointF(c.X + c.Width * 0.45f, c.Y + c.Height * 0.68f),
-                new PointF(c.X + c.Width * 0.73f, c.Y + c.Height * 0.32f)
-            });
-        }
-        else
-        {
-            var colorAro = destacada ? Ui.Naranja : Color.FromArgb(99, 99, 102);
-            using var pen = new Pen(colorAro, Sf(destacada ? 2.2f : 1.8f));
-            g.DrawEllipse(pen, c.X + 1, c.Y + 1, c.Width - 2, c.Height - 2);
-        }
+        // Punto a la izquierda: naranja si es importante, gris si es normal
+        int punto = S(8);
+        var p = new Rectangle(r.Left + S(16), r.Top + (r.Height - punto) / 2, punto, punto);
+        using (var colorPunto = new SolidBrush(t.Importante ? Ui.Naranja : Color.FromArgb(99, 99, 102)))
+            g.FillEllipse(colorPunto, p);
 
         // Título y, si hay, el texto pequeño de debajo
-        int xTexto = r.Left + S(48);
-        int anchoTexto = r.Width - S(48) - S(40);
+        int xTexto = r.Left + S(32);
+        int anchoTexto = r.Width - S(32) - S(40);
         var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
-        var colorTitulo = t.Hecha ? Ui.Gris : Color.White;
-        var fuenteTitulo = t.Hecha ? fHecha : fNormal;
 
         var (sub, colorSub) = Subtitulo(t, destacada);
         if (sub == null)
         {
-            TextRenderer.DrawText(g, t.Titulo, fuenteTitulo, new Rectangle(xTexto, r.Top, anchoTexto, r.Height), colorTitulo, flags);
+            TextRenderer.DrawText(g, t.Titulo, fNormal, new Rectangle(xTexto, r.Top, anchoTexto, r.Height), Color.White, flags);
         }
         else
         {
-            TextRenderer.DrawText(g, t.Titulo, fuenteTitulo, new Rectangle(xTexto, r.Top + S(6), anchoTexto, S(24)), colorTitulo, flags);
-            TextRenderer.DrawText(g, sub, fSub, new Rectangle(xTexto, r.Top + S(28), anchoTexto, S(18)), t.Hecha ? Ui.Gris : colorSub, flags);
+            TextRenderer.DrawText(g, t.Titulo, fNormal, new Rectangle(xTexto, r.Top + S(6), anchoTexto, S(24)), Color.White, flags);
+            TextRenderer.DrawText(g, sub, fSub, new Rectangle(xTexto, r.Top + S(28), anchoTexto, S(18)), colorSub, flags);
         }
 
-        // Aspa para borrar al pasar el ratón
-        if (e.Index == hover)
+        // Aspa para borrar: siempre visible en gris y roja al pasar el ratón por la fila
         {
             float cx = r.Right - S(24), cy = r.Top + r.Height / 2f, medio = Sf(5f);
-            using var pen = new Pen(Ui.Gris, Sf(1.8f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            using var pen = new Pen(e.Index == hover ? Ui.Rojo : Color.FromArgb(99, 99, 102), Sf(1.8f))
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round
+            };
             g.DrawLine(pen, cx - medio, cy - medio, cx + medio, cy + medio);
             g.DrawLine(pen, cx - medio, cy + medio, cx + medio, cy - medio);
         }
@@ -945,25 +908,19 @@ public class MainForm : Form
         int i = lista.IndexFromPoint(e.Location);
         if (i < 0 || i >= visibles.Count) return;
 
-        if (e.X > lista.ClientSize.Width - S(44))
-        {
-            // Clic en el aspa: eliminar
-            tareas.Remove(visibles[i]);
-        }
-        else
-        {
-            // Clic en cualquier otro sitio de la fila: marcar / desmarcar
-            visibles[i].Hecha = !visibles[i].Hecha;
-        }
+        // Solo el aspa elimina la tarea; hacer clic en el resto de la fila no hace nada
+        if (e.X <= lista.ClientSize.Width - S(44)) return;
+
+        tareas.Remove(visibles[i]);
         Guardar();
         Refrescar();
     }
 
     // ---------- Lógica de tareas ----------
 
-    // Una tarea importante y pendiente sale TODOS los días (desde que se creó) hasta que se haga
+    // Una tarea importante sale TODOS los días (desde que se creó) hasta que se elimine
     static bool Destacada(Tarea t, DateTime d) =>
-        t.Importante && !t.Hecha && d.Date >= t.Creada.Date;
+        t.Importante && d.Date >= t.Creada.Date;
 
     // Lista de un día: primero las importantes (por fecha de entrega) y después las del día
     List<Tarea> TareasDelDia(DateTime d)
@@ -976,13 +933,12 @@ public class MainForm : Form
 
         var resto = tareas
             .Where(t => !Destacada(t, d) && t.Fecha.Date == d)
-            .OrderBy(t => t.Hecha)
-            .ThenBy(t => t.ConHora ? t.Fecha.TimeOfDay : TimeSpan.FromDays(1));
+            .OrderBy(t => t.ConHora ? t.Fecha.TimeOfDay : TimeSpan.FromDays(1));
 
         return arriba.Concat(resto).ToList();
     }
 
-    int PendientesHoy() => TareasDelDia(DateTime.Today).Count(t => !t.Hecha);
+    int PendientesHoy() => TareasDelDia(DateTime.Today).Count;
 
     void IrADia(DateTime d)
     {
@@ -1066,11 +1022,8 @@ public class MainForm : Form
         string fechaTxt = dia.ToString("dddd d 'de' MMMM", es);
         fechaTxt = char.ToUpper(fechaTxt[0]) + fechaTxt[1..];
 
-        int pend = visibles.Count(t => !t.Hecha);
-        lblSub.Text =
-            visibles.Count == 0 ? fechaTxt :
-            pend == 0 ? $"{fechaTxt} · todo hecho" :
-            $"{fechaTxt} · {pend} pendiente{(pend == 1 ? "" : "s")}";
+        int n = visibles.Count;
+        lblSub.Text = n == 0 ? fechaTxt : $"{fechaTxt} · {n} tarea{(n == 1 ? "" : "s")}";
     }
 
     // ---------- Icono con número ----------
@@ -1118,7 +1071,10 @@ public class MainForm : Form
         {
             if (!File.Exists(rutaJson)) return;
             var datos = JsonSerializer.Deserialize<List<Tarea>>(File.ReadAllText(rutaJson));
-            if (datos != null) tareas.AddRange(datos);
+            if (datos == null) return;
+
+            // Las tareas que estaban marcadas como hechas en versiones anteriores se descartan
+            tareas.AddRange(datos.Where(t => !t.Hecha));
         }
         catch (Exception ex)
         {
@@ -1155,7 +1111,6 @@ public class MainForm : Form
             iconoActual?.Dispose();
             reloj.Dispose();
             fNormal.Dispose();
-            fHecha.Dispose();
             fSub.Dispose();
         }
         base.Dispose(disposing);

@@ -3,7 +3,7 @@ namespace TareasBandeja.Views;
 internal sealed class UndoSnackbar : Panel
 {
     private readonly Label mensaje = new();
-    private readonly Button deshacer = new();
+    private readonly Label deshacer = new();
     private readonly System.Windows.Forms.Timer temporizador = new();
 
     public event EventHandler? DeshacerSolicitado;
@@ -23,8 +23,9 @@ internal sealed class UndoSnackbar : Panel
         deshacer.Text = "Deshacer";
         deshacer.ForeColor = Ui.AzulClaro;
         deshacer.BackColor = Ui.Tarjeta;
-        deshacer.FlatStyle = FlatStyle.Flat;
-        deshacer.FlatAppearance.BorderSize = 0;
+        deshacer.Font = new Font("Segoe UI", 9.5f);
+        deshacer.TextAlign = ContentAlignment.MiddleCenter;
+        deshacer.AutoSize = false;
         deshacer.Cursor = Cursors.Hand;
         deshacer.Click += (_, _) =>
         {
@@ -55,8 +56,10 @@ internal sealed class UndoSnackbar : Panel
     protected override void OnResize(EventArgs eventargs)
     {
         base.OnResize(eventargs);
-        mensaje.Bounds = new Rectangle(14, 0, Math.Max(0, Width - 112), Height);
-        deshacer.Bounds = new Rectangle(Width - 92, 4, 82, Math.Max(0, Height - 8));
+        const int anchoBoton = 108;
+        const int margenDerecho = 12;
+        mensaje.Bounds = new Rectangle(14, 0, Math.Max(0, Width - anchoBoton - margenDerecho - 24), Height);
+        deshacer.Bounds = new Rectangle(Math.Max(0, Width - anchoBoton - margenDerecho), 3, anchoBoton, Math.Max(0, Height - 6));
         using var path = Ui.RoundedRect(new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1)), Height / 2);
         Region = new Region(path);
     }

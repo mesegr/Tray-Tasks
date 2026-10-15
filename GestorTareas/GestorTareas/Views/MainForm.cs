@@ -1271,23 +1271,40 @@ public class MainForm : Form
         if (e.Index < visibles.Count - 1)
         {
             using var sep = new Pen(Ui.Separador, 1f);
-            g.DrawLine(sep, r.Left + S(32), r.Bottom - 1, r.Right - S(12), r.Bottom - 1);
+            g.DrawLine(sep, r.Left + S(40), r.Bottom - 1, r.Right - S(12), r.Bottom - 1);
         }
 
-        // El círculo funciona como casilla de tarea completada.
-        int punto = S(8);
-        var p = new Rectangle(r.Left + S(16), r.Top + (r.Height - punto) / 2, punto, punto);
-        using (var colorPunto = new SolidBrush(t.Hecha ? Ui.Verde : t.Importante ? Ui.Naranja : Color.FromArgb(99, 99, 102)))
-            g.FillEllipse(colorPunto, p);
+        // Indicador circular a juego con las casillas de Ajustes.
+        int lado = S(19);
+        var p = new Rectangle(r.Left + S(12), r.Top + (r.Height - lado) / 2, lado, lado);
         if (t.Hecha)
         {
-            using var tick = new Pen(Color.White, Math.Max(1.2f, Sf(1.5f))) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-            g.DrawLines(tick, new[] { new PointF(p.Left + 1, p.Top + p.Height / 2f), new PointF(p.Left + p.Width / 2f, p.Bottom - 1), new PointF(p.Right + 2, p.Top - 1) });
+            using var fondoPunto = new SolidBrush(Ui.Azul);
+            g.FillEllipse(fondoPunto, p);
+            using var tick = new Pen(Color.White, Sf(1.8f))
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round
+            };
+            g.DrawLines(tick, new[]
+            {
+                new PointF(p.Left + lado * 0.24f, p.Top + lado * 0.53f),
+                new PointF(p.Left + lado * 0.43f, p.Top + lado * 0.70f),
+                new PointF(p.Left + lado * 0.76f, p.Top + lado * 0.32f)
+            });
+        }
+        else
+        {
+            using var fondoPunto = new SolidBrush(Ui.Hover);
+            using var bordePunto = new Pen(t.Importante ? Ui.Naranja : Ui.Separador, Sf(1.4f));
+            g.FillEllipse(fondoPunto, p);
+            g.DrawEllipse(bordePunto, p);
         }
 
         // Título y, si hay, el texto pequeño de debajo
-        int xTexto = r.Left + S(32);
-        int anchoTexto = r.Width - S(32) - S(40);
+        int xTexto = r.Left + S(40);
+        int anchoTexto = r.Width - S(40) - S(40);
         var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
 
         var (sub, colorSub) = Subtitulo(t, destacada);

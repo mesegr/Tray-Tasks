@@ -14,10 +14,10 @@ internal sealed class AjustesPanel : RoundedPanel
     readonly Label etiquetaAviso = new();
     readonly Label etiquetaDuracion = new();
     readonly Label etiquetaUbicacion = new();
-    readonly CheckBox sonido = new();
-    readonly CheckBox inicioAutomatico = new();
-    readonly CheckBox temaClaro = new();
-    readonly CheckBox mostrarAlIniciar = new();
+    readonly AppCheckBox sonido = new();
+    readonly AppCheckBox inicioAutomatico = new();
+    readonly AppCheckBox temaClaro = new();
+    readonly AppCheckBox mostrarAlIniciar = new();
     readonly Panel contenido = new();
     ConfiguracionAtajo configuracion;
     readonly Button guardar;
@@ -84,11 +84,12 @@ internal sealed class AjustesPanel : RoundedPanel
         mostrarAlIniciar.Text = "Mostrar ventana al iniciar Windows";
         foreach (var opcion in new[] { sonido, inicioAutomatico, temaClaro, mostrarAlIniciar })
         {
-            opcion.AutoSize = true;
+            opcion.AutoSize = false;
             opcion.ForeColor = Color.White;
             opcion.BackColor = Ui.Tarjeta;
             opcion.Font = new Font("Segoe UI", 11f);
             opcion.Left = 18;
+            opcion.Size = new Size(272, 26);
         }
         sonido.Top = 314;
         inicioAutomatico.Top = 340;
@@ -123,6 +124,8 @@ internal sealed class AjustesPanel : RoundedPanel
         const int separacion = 8;
         contenido.Bounds = new Rectangle(0, 0, Width, Math.Max(100, Height - 58));
         capturaAtajo.Width = Math.Max(120, Width - 36);
+        foreach (var opcion in new[] { sonido, inicioAutomatico, temaClaro, mostrarAlIniciar })
+            opcion.Width = Math.Max(140, Width - 36);
         int anchoInterior = Math.Max(140, Width - 36);
         int anchoColumna = Math.Max(80, (anchoInterior - 14) / 2);
         avisoPrevio.Width = anchoColumna;

@@ -4,6 +4,9 @@
     <Compile Update="Views\AjustesPanel.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Update="Views\AppCheckBox.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Update="Views\NotificationPopup.cs">
       <SubType>Form</SubType>
     </Compile>

@@ -1,0 +1,306 @@
+﻿
+using Microsoft.Win32;
+using System.Drawing.Drawing2D;
+using System.Drawing.Text;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+
+namespace TareasBandeja;
+
+// ---------- Modelo ----------
+public class Tarea
+{
+    public string Titulo { get; set; } = "";
+    public DateTime Fecha { get; set; } = DateTime.Today;
+    public bool Hecha { get; set; }
+}
+
+// ---------- Programa ----------
+static class Program
+{
+    [STAThread]
+    static void Main()
+    {
+        // Evita abrir dos copias (si no, saldrían dos iconos)
+        using var mutex = new Mutex(true, "TareasBandejaUnica", out bool esLaPrimera);
+        if (!esLaPrimera) return;
+
+        ApplicationConfiguration.Initialize();
+        Application.Run(new MainForm());
+    }
+}
+
+// ---------- Ventana + icono de bandeja ----------
+public class MainForm : Form
+{
+    const string ClaveInicio = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    const string NombreApp = "TareasBandeja";
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    static extern bool DestroyIcon(IntPtr handle);
+
+    readonly string rutaJson = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "TareasBandeja", "tareas.json");
+
+    readonly List<Tarea> tareas = new();
+    List<Tarea> visibles = new();   // tareas del día que se está mostrando
+
+    readonly NotifyIcon tray = new();
+    readonly DateTimePicker fecha = new();
+    readonly CheckedListBox lista = new();
+    readonly TextBox txtNueva = new();
+    readonly Button btnAnadir = new();
+    readonly Button btnEliminar = new();
+    readonly CheckBox chkInicio = new();
+    readonly System.Windows.Forms.Timer reloj = new();
+
+    Icon? iconoActual;
+    DateTime ultimoDia = DateTime.Today;
+    bool cargando;
+    bool salir;
+    bool primeraVez = true;
+
+    public MainForm()
+    {
+        // --- Aspecto de la ventana ---
+        Text = "Tareas";
+        ClientSize = new Size(340, 440);
+        FormBorderStyle = FormBorderStyle.FixedToolWindow;
+        ShowInTaskbar = false;
+        TopMost = true;
+        StartPosition = FormStartPosition.Manual;
+        KeyPreview = true;
+
+        fecha.Format = DateTimePickerFormat.Short;
+        fecha.SetBounds(10, 10, 150, 25);
+
+        lista.SetBounds(10, 45, 320, 280);
+        lista.CheckOnClick = true;
+        lista.IntegralHeight = false;
+
+        txtNueva.SetBounds(10, 340, 240, 25);
+        txtNueva.PlaceholderText = "Nueva tarea...";
+
+        btnAnadir.Text = "Añadir";
+        btnAnadir.SetBounds(260, 338, 70, 28);
+
+        btnEliminar.Text = "Eliminar seleccionada";
+        btnEliminar.SetBounds(10, 375, 160, 28);
+
+        chkInicio.Text = "Iniciar con Windows";
+        chkInicio.SetBounds(10, 410, 200, 24);
+
+        Controls.AddRange(new Control[] { fecha, lista, txtNueva, btnAnadir, btnEliminar, chkInicio });
+        AcceptButton = btnAnadir; // Enter = añadir
+
+        // --- Icono de bandeja ---
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("Abrir", null, (s, e) => Mostrar());
+        menu.Items.Add("Salir", null, (s, e) => { salir = true; tray.Visible = false; Application.Exit(); });
+        tray.ContextMenuStrip = menu;
+        tray.MouseClick += (s, e) =>
+        {
+            if (e.Button != MouseButtons.Left) return;
+            if (Visible) Hide(); else Mostrar();
+        };
+
+        // --- Datos ---
+        Cargar();
+        Refrescar();
+        tray.Visible = true;
+
+        // Aviso al arrancar si tienes tareas pendientes hoy
+        int pendientes = PendientesHoy();
+        if (pendientes > 0)
+            tray.ShowBalloonTip(4000, "Tareas de hoy", $"Tienes {pendientes} tarea(s) pendiente(s)", ToolTipIcon.Info);
+
+        // --- Eventos ---
+        fecha.ValueChanged += (s, e) => Refrescar();
+        btnAnadir.Click += (s, e) => Anadir();
+        btnEliminar.Click += (s, e) => Eliminar();
+        lista.ItemCheck += Lista_ItemCheck;
+        lista.KeyDown += (s, e) => { if (e.KeyCode == Keys.Delete) Eliminar(); };
+        KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) Hide(); };
+
+        chkInicio.Checked = InicioActivado();
+        chkInicio.CheckedChanged += (s, e) => CambiarInicio(chkInicio.Checked);
+
+        // Cada minuto comprueba si ha cambiado el día (medianoche)
+        reloj.Interval = 60_000;
+        reloj.Tick += (s, e) =>
+        {
+            if (DateTime.Today == ultimoDia) return;
+            ultimoDia = DateTime.Today;
+            fecha.Value = DateTime.Today;
+            Refrescar();
+        };
+        reloj.Start();
+    }
+
+    // La app arranca oculta (solo el icono de bandeja)
+    protected override void SetVisibleCore(bool value)
+    {
+        if (primeraVez)
+        {
+            primeraVez = false;
+            value = false;
+            if (!IsHandleCreated) CreateHandle();
+        }
+        base.SetVisibleCore(value);
+    }
+
+    // Al pulsar la X no se cierra: se oculta
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (!salir && e.CloseReason == CloseReason.UserClosing)
+        {
+            e.Cancel = true;
+            Hide();
+        }
+        base.OnFormClosing(e);
+    }
+
+    void Mostrar()
+    {
+        fecha.Value = DateTime.Today;
+        var area = Screen.PrimaryScreen!.WorkingArea;
+        Location = new Point(area.Right - Width - 10, area.Bottom - Height - 10);
+        Show();
+        WindowState = FormWindowState.Normal;
+        Activate();
+        txtNueva.Focus();
+    }
+
+    // ---------- Lógica de tareas ----------
+    int PendientesHoy() => tareas.Count(t => t.Fecha.Date == DateTime.Today && !t.Hecha);
+
+    void Anadir()
+    {
+        string titulo = txtNueva.Text.Trim();
+        if (titulo == "") return;
+
+        tareas.Add(new Tarea { Titulo = titulo, Fecha = fecha.Value.Date });
+        txtNueva.Clear();
+        Guardar();
+        Refrescar();
+    }
+
+    void Eliminar()
+    {
+        int i = lista.SelectedIndex;
+        if (i < 0) return;
+
+        tareas.Remove(visibles[i]);
+        Guardar();
+        Refrescar();
+    }
+
+    void Lista_ItemCheck(object? sender, ItemCheckEventArgs e)
+    {
+        if (cargando) return;
+        visibles[e.Index].Hecha = e.NewValue == CheckState.Checked;
+        Guardar();
+        ActualizarIcono();
+    }
+
+    void Refrescar()
+    {
+        cargando = true;
+        lista.Items.Clear();
+        visibles = tareas
+            .Where(t => t.Fecha.Date == fecha.Value.Date)
+            .OrderBy(t => t.Hecha)
+            .ToList();
+        foreach (var t in visibles)
+            lista.Items.Add(t.Titulo, t.Hecha);
+        cargando = false;
+
+        ActualizarIcono();
+    }
+
+    // ---------- Icono con número ----------
+    void ActualizarIcono()
+    {
+        int n = PendientesHoy();
+
+        using var bmp = new Bitmap(32, 32);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+            g.Clear(Color.Transparent);
+
+            // Verde si no queda nada, rojo si hay pendientes
+            using var fondo = new SolidBrush(n == 0 ? Color.SeaGreen : Color.Crimson);
+            g.FillEllipse(fondo, 0, 0, 31, 31);
+
+            string texto = n > 99 ? "99+" : n.ToString();
+            float tam = texto.Length == 1 ? 22 : texto.Length == 2 ? 18 : 12;
+            using var fuente = new Font("Segoe UI", tam, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var formato = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center
+            };
+            g.DrawString(texto, fuente, Brushes.White, new RectangleF(0, 0, 32, 33), formato);
+        }
+
+        IntPtr handle = bmp.GetHicon();
+        var nuevo = (Icon)Icon.FromHandle(handle).Clone();
+        DestroyIcon(handle);
+
+        tray.Icon = nuevo;
+        iconoActual?.Dispose();
+        iconoActual = nuevo;
+
+        tray.Text = n == 0 ? "Sin tareas pendientes hoy" : $"{n} tarea(s) pendiente(s) hoy";
+    }
+
+    // ---------- Guardar / cargar ----------
+    void Cargar()
+    {
+        try
+        {
+            if (!File.Exists(rutaJson)) return;
+            var datos = JsonSerializer.Deserialize<List<Tarea>>(File.ReadAllText(rutaJson));
+            if (datos != null) tareas.AddRange(datos);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("No se pudieron cargar las tareas: " + ex.Message);
+        }
+    }
+
+    void Guardar()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(rutaJson)!);
+        File.WriteAllText(rutaJson, JsonSerializer.Serialize(tareas));
+    }
+
+    // ---------- Iniciar con Windows ----------
+    static bool InicioActivado()
+    {
+        using var k = Registry.CurrentUser.OpenSubKey(ClaveInicio);
+        return k?.GetValue(NombreApp) != null;
+    }
+
+    static void CambiarInicio(bool activar)
+    {
+        using var k = Registry.CurrentUser.OpenSubKey(ClaveInicio, true);
+        if (k == null) return;
+        if (activar) k.SetValue(NombreApp, $"\"{Application.ExecutablePath}\"");
+        else k.DeleteValue(NombreApp, false);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            tray.Dispose();
+            iconoActual?.Dispose();
+            reloj.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+}

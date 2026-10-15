@@ -48,6 +48,18 @@ internal sealed class NotificationPopup : Form
             AutoEllipsis = false
         };
 
+        int altoMensaje = TextRenderer.MeasureText(
+            mensaje,
+            lblMensaje.Font,
+            new Size(320, 0),
+            TextFormatFlags.WordBreak).Height;
+        int altoPopup = Math.Max(92, 58 + altoMensaje);
+
+        Size = new Size(360, altoPopup);
+        indicador.Height = altoPopup - 32;
+        lblMensaje.Height = altoMensaje;
+        Region = new Region(Ui.RoundedRect(new Rectangle(0, 0, Width, Height), 14));
+
         Controls.Add(indicador);
         Controls.Add(lblTitulo);
         Controls.Add(lblMensaje);

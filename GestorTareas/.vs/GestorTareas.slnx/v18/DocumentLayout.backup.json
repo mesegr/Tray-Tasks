@@ -7,7 +7,7 @@
       "RelativeMoniker": "D:0:0:{523B2374-83F4-4721-D268-ABA486D7F251}|GestorTareas\\GestorTareas.csproj|solutionrelative:gestortareas\\views\\mainform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{523B2374-83F4-4721-D268-ABA486D7F251}|GestorTareas\\GestorTareas.csproj|d:\\proyectos\\tray-tasks\\gestortareas\\gestortareas\\views\\notificationpopup.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form",
+      "AbsoluteMoniker": "D:0:0:{523B2374-83F4-4721-D268-ABA486D7F251}|GestorTareas\\GestorTareas.csproj|D:\\Proyectos\\Tray-Tasks\\GestorTareas\\gestortareas\\views\\notificationpopup.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form",
       "RelativeMoniker": "D:0:0:{523B2374-83F4-4721-D268-ABA486D7F251}|GestorTareas\\GestorTareas.csproj|solutionrelative:gestortareas\\views\\notificationpopup.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form"
     },
     {
@@ -46,8 +46,7 @@
               "ToolTip": "D:\\Proyectos\\Tray-Tasks\\GestorTareas\\GestorTareas\\Views\\NotificationPopup.cs [Dise\u00F1o]",
               "RelativeToolTip": "GestorTareas\\Views\\NotificationPopup.cs [Dise\u00F1o]",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-10-15T12:29:23.301Z",
-              "EditorCaption": " [Dise\u00F1o]"
+              "WhenOpened": "2026-10-15T12:29:23.301Z"
             },
             {
               "$type": "Document",
@@ -59,8 +58,7 @@
               "RelativeToolTip": "GestorTareas\\Views\\NotificationPopup.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAFQAAAAWAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-10-15T12:29:05.352Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-10-15T12:29:05.352Z"
             }
           ]
         }

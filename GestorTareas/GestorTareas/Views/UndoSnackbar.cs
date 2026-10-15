@@ -60,7 +60,7 @@ internal sealed class UndoSnackbar : Panel
         const int margenDerecho = 12;
         mensaje.Bounds = new Rectangle(14, 0, Math.Max(0, Width - anchoBoton - margenDerecho - 24), Height);
         deshacer.Bounds = new Rectangle(Math.Max(0, Width - anchoBoton - margenDerecho), 3, anchoBoton, Math.Max(0, Height - 6));
-        using var path = Ui.RoundedRect(new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1)), Height / 2);
+        using var path = Ui.RoundedRect(new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1)), Ui.RadioEsquina);
         Region = new Region(path);
     }
 

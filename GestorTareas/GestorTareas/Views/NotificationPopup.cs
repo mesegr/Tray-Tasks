@@ -14,7 +14,7 @@ internal sealed class NotificationPopup : Form
     private readonly System.Windows.Forms.Timer cierre = new();
     private bool saliendo;
 
-    public NotificationPopup(string titulo, string mensaje, bool reproducirSonido)
+    public NotificationPopup(string titulo, string mensaje, bool reproducirSonido, Action? accion = null)
     {
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
@@ -23,7 +23,7 @@ internal sealed class NotificationPopup : Form
         BackColor = Ui.Tarjeta;
         Size = new Size(360, 120);
         DoubleBuffered = true;
-        Region = new Region(Ui.RoundedRect(new Rectangle(0, 0, Width, Height), 14));
+        Region = new Region(Ui.RoundedRect(new Rectangle(0, 0, Width, Height), Ui.RadioEsquina));
 
         var indicador = new Panel
         {
@@ -58,16 +58,32 @@ internal sealed class NotificationPopup : Form
             lblMensaje.Font,
             new Size(320, 0),
             TextFormatFlags.WordBreak).Height;
-        int altoPopup = Math.Max(92, 58 + altoMensaje);
+        int altoPopup = accion == null ? Math.Max(92, 58 + altoMensaje) : Math.Max(118, 82 + altoMensaje);
 
         Size = new Size(360, altoPopup);
         indicador.Height = altoPopup - 32;
         lblMensaje.Height = altoMensaje;
-        Region = new Region(Ui.RoundedRect(new Rectangle(0, 0, Width, Height), 14));
+        Region = new Region(Ui.RoundedRect(new Rectangle(0, 0, Width, Height), Ui.RadioEsquina));
 
         Controls.Add(indicador);
         Controls.Add(lblTitulo);
         Controls.Add(lblMensaje);
+        if (accion != null)
+        {
+            var abrir = new Label
+            {
+                AutoSize = false,
+                Text = "Abrir tarea",
+                ForeColor = Ui.AzulClaro,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleRight,
+                Cursor = Cursors.Hand,
+                Location = new Point(22, altoPopup - 25),
+                Size = new Size(320, 20)
+            };
+            abrir.Click += (_, _) => accion();
+            Controls.Add(abrir);
+        }
 
         animacion.Interval = 15;
         animacion.Tick += Mover;
@@ -120,7 +136,7 @@ internal sealed class NotificationPopup : Form
     protected override void OnPaint(PaintEventArgs e)
     {
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using var path = Ui.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), 14);
+        using var path = Ui.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), Ui.RadioEsquina);
         using var fondo = new SolidBrush(Ui.Tarjeta);
         using var borde = new Pen(Ui.Separador, 1f);
         e.Graphics.FillPath(fondo, path);
@@ -237,19 +253,20 @@ internal static class Notificador
 {
     private const int MaximoVisibles = 3;
     private const int Separacion = 8;
-    private const int DuracionAviso = 2000;
+    public static int DuracionAviso { get; set; } = 2000;
+    public static int Posicion { get; set; }
 
-    private static readonly Queue<(string Titulo, string Mensaje)> pendientes = new();
-    private static readonly Queue<(string Titulo, string Mensaje, bool Sonido)> colaSecuencial = new();
-    private static readonly Queue<(string Titulo, string Mensaje)> colaApilada = new();
+    private static readonly Queue<(string Titulo, string Mensaje, bool Sonido, int Duracion, Action? Accion)> pendientes = new();
+    private static readonly Queue<(string Titulo, string Mensaje, bool Sonido, int Duracion, Action? Accion)> colaSecuencial = new();
+    private static readonly Queue<(string Titulo, string Mensaje, bool Sonido, int Duracion, Action? Accion)> colaApilada = new();
     private static readonly List<NotificationPopup> activas = new();
     private static System.Windows.Forms.Timer? temporizadorLote;
     private static System.Windows.Forms.Timer? temporizadorApilado;
     private static NotificationPopup? secuencialActual;
 
-    public static void Mostrar(string titulo, string mensaje)
+    public static void Mostrar(string titulo, string mensaje, bool reproducirSonido = true, int duracionMs = 2000, Action? accion = null)
     {
-        pendientes.Enqueue((titulo, mensaje));
+        pendientes.Enqueue((titulo, mensaje, reproducirSonido, Math.Clamp(duracionMs, 1000, 15000), accion));
 
         // Espera unos milisegundos para agrupar avisos generados en el mismo ciclo
         // y decidir si corresponde reproducir uno o varios sonidos.
@@ -275,7 +292,7 @@ internal static class Notificador
             while (pendientes.Count > 0)
             {
                 var aviso = pendientes.Dequeue();
-                colaSecuencial.Enqueue((aviso.Titulo, aviso.Mensaje, true));
+                colaSecuencial.Enqueue(aviso);
             }
 
             MostrarSiguienteSecuencial();
@@ -305,7 +322,7 @@ internal static class Notificador
         if (secuencialActual != null || colaSecuencial.Count == 0) return;
 
         var aviso = colaSecuencial.Dequeue();
-        secuencialActual = new NotificationPopup(aviso.Titulo, aviso.Mensaje, aviso.Sonido);
+        secuencialActual = new NotificationPopup(aviso.Titulo, aviso.Mensaje, aviso.Sonido, aviso.Accion);
         secuencialActual.FormClosed += (_, _) =>
         {
             secuencialActual = null;
@@ -315,7 +332,7 @@ internal static class Notificador
         secuencialActual.Show();
         secuencialActual.BringToFront();
         secuencialActual.AnimarHasta(PosicionInferior(secuencialActual));
-        secuencialActual.ProgramarCierre(DuracionAviso);
+        secuencialActual.ProgramarCierre(aviso.Duracion);
     }
 
     private static void AgregarApilada(bool reproducirSonido)
@@ -323,11 +340,12 @@ internal static class Notificador
         if (colaApilada.Count == 0) return;
 
         var aviso = colaApilada.Dequeue();
-        var popup = new NotificationPopup(aviso.Titulo, aviso.Mensaje, reproducirSonido);
+        var popup = new NotificationPopup(aviso.Titulo, aviso.Mensaje, reproducirSonido && aviso.Sonido, aviso.Accion);
         popup.PrepararEntrada();
         activas.Add(popup);
         popup.Show();
         popup.BringToFront();
+        popup.ProgramarCierre(aviso.Duracion);
     }
 
     private static void AvanzarApiladas()
@@ -356,16 +374,20 @@ internal static class Notificador
     {
         int distancia = 0;
 
-        // La más reciente queda abajo; las anteriores se apilan hacia arriba.
-        for (int i = activas.Count - 1; i >= 0; i--)
+        bool arriba = Posicion >= 2;
+        int inicio = arriba ? 0 : activas.Count - 1;
+        int fin = arriba ? activas.Count : -1;
+        int paso = arriba ? 1 : -1;
+        for (int i = inicio; i != fin; i += paso)
         {
             var popup = activas[i];
             if (popup.IsDisposed) continue;
 
             var area = Screen.PrimaryScreen!.WorkingArea;
+            bool izquierda = Posicion is 1 or 3;
             var destino = new Point(
-                area.Right - popup.Width - 16,
-                area.Bottom - popup.Height - 16 - distancia);
+                izquierda ? area.Left + 16 : area.Right - popup.Width - 16,
+                arriba ? area.Top + 16 + distancia : area.Bottom - popup.Height - 16 - distancia);
             popup.AnimarHasta(destino);
             distancia += popup.Height + Separacion;
         }
@@ -374,6 +396,9 @@ internal static class Notificador
     private static Point PosicionInferior(NotificationPopup popup)
     {
         var area = Screen.PrimaryScreen!.WorkingArea;
-        return new Point(area.Right - popup.Width - 16, area.Bottom - popup.Height - 16);
+        bool izquierda = Posicion is 1 or 3;
+        bool arriba = Posicion >= 2;
+        return new Point(izquierda ? area.Left + 16 : area.Right - popup.Width - 16,
+            arriba ? area.Top + 16 : area.Bottom - popup.Height - 16);
     }
 }

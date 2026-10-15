@@ -3,6 +3,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using Microsoft.Win32;
 using TareasBandeja.Controllers;
 using TareasBandeja.Models;
@@ -14,16 +15,36 @@ namespace TareasBandeja.Views;
 // =====================================================================
 static class Ui
 {
-    public static readonly Color Fondo = Color.FromArgb(28, 28, 30);
-    public static readonly Color Tarjeta = Color.FromArgb(44, 44, 46);
-    public static readonly Color Hover = Color.FromArgb(54, 54, 56);
-    public static readonly Color Separador = Color.FromArgb(62, 62, 64);
-    public static readonly Color Gris = Color.FromArgb(142, 142, 147);
-    public static readonly Color Azul = Color.FromArgb(10, 132, 255);
-    public static readonly Color AzulClaro = Color.FromArgb(64, 156, 255);
-    public static readonly Color Verde = Color.FromArgb(48, 209, 88);
-    public static readonly Color Rojo = Color.FromArgb(255, 69, 58);
-    public static readonly Color Naranja = Color.FromArgb(255, 159, 10);
+    public static int RadioEsquina { get; private set; } = 16;
+
+    public static Color Fondo { get; private set; } = Color.FromArgb(28, 28, 30);
+    public static Color Tarjeta { get; private set; } = Color.FromArgb(44, 44, 46);
+    public static Color Hover { get; private set; } = Color.FromArgb(54, 54, 56);
+    public static Color Separador { get; private set; } = Color.FromArgb(62, 62, 64);
+    public static Color Gris { get; private set; } = Color.FromArgb(142, 142, 147);
+    public static Color Azul { get; private set; } = Color.FromArgb(10, 132, 255);
+    public static Color AzulClaro { get; private set; } = Color.FromArgb(64, 156, 255);
+    public static Color Verde { get; private set; } = Color.FromArgb(48, 209, 88);
+    public static Color Rojo { get; private set; } = Color.FromArgb(255, 69, 58);
+    public static Color Naranja { get; private set; } = Color.FromArgb(255, 159, 10);
+    public static Color Texto { get; private set; } = Color.White;
+
+    public static void EstablecerRadioEsquina(int radio) => RadioEsquina = Math.Max(1, radio);
+
+    public static void EstablecerTema(bool claro)
+    {
+        Fondo = claro ? Color.FromArgb(242, 242, 247) : Color.FromArgb(28, 28, 30);
+        Tarjeta = claro ? Color.White : Color.FromArgb(44, 44, 46);
+        Hover = claro ? Color.FromArgb(229, 229, 234) : Color.FromArgb(54, 54, 56);
+        Separador = claro ? Color.FromArgb(209, 209, 214) : Color.FromArgb(62, 62, 64);
+        Gris = claro ? Color.FromArgb(99, 99, 102) : Color.FromArgb(142, 142, 147);
+        Texto = claro ? Color.FromArgb(28, 28, 30) : Color.White;
+        Azul = Color.FromArgb(10, 132, 255);
+        AzulClaro = Color.FromArgb(0, 122, 255);
+        Verde = Color.FromArgb(48, 209, 88);
+        Rojo = Color.FromArgb(255, 69, 58);
+        Naranja = Color.FromArgb(255, 159, 10);
+    }
 
     public static GraphicsPath RoundedRect(Rectangle r, int radius)
     {
@@ -59,13 +80,46 @@ static class Ui
 // Panel con fondo redondeado (las "tarjetas" de iOS)
 class RoundedPanel : Panel
 {
+    int radius = Ui.RadioEsquina;
+
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public int Radius { get; set; } = 16;
+    public int Radius
+    {
+        get => radius;
+        set
+        {
+            radius = Math.Max(0, value);
+            ActualizarRecorte();
+            Invalidate();
+        }
+    }
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Color Fill { get; set; } = Ui.Tarjeta;
 
     public RoundedPanel() { DoubleBuffered = true; }
+
+    protected override void OnSizeChanged(EventArgs e)
+    {
+        base.OnSizeChanged(e);
+        ActualizarRecorte();
+    }
+
+    void ActualizarRecorte()
+    {
+        if (Width < 2 || Height < 2) return;
+        if (radius == 0)
+        {
+            var regionAnteriorBorrar = Region;
+            Region = null;
+            regionAnteriorBorrar?.Dispose();
+            return;
+        }
+        using var path = Ui.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), radius);
+        var regionAnterior = Region;
+        Region = new Region(path);
+        regionAnterior?.Dispose();
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -297,7 +351,7 @@ class Chip : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Parent?.BackColor ?? Ui.Fondo);
 
-        using (var path = Ui.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), Height / 2))
+        using (var path = Ui.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), Ui.RadioEsquina))
         {
             var colorFondo = marcado && !SoloCirculoMarcado
                 ? ColorActivo
@@ -357,6 +411,8 @@ class MiniCalendar : Control
     DateTime sel = DateTime.Today;
     int hoverDia = -1;
     int hoverNav = 0;
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Func<DateTime, bool>? TieneTareas { get; set; }
 
     public event EventHandler<DateTime>? DiaElegido;
 
@@ -429,7 +485,7 @@ class MiniCalendar : Control
         // Mes y año
         string titulo = mes.ToString("MMMM yyyy", es);
         titulo = char.ToUpper(titulo[0]) + titulo[1..];
-        TextRenderer.DrawText(g, titulo, fTit, new Rectangle(0, 0, Width, (int)CabH), Color.White, centro);
+        TextRenderer.DrawText(g, titulo, fTit, new Rectangle(0, 0, Width, (int)CabH), Ui.Texto, centro);
 
         // Flechas de mes
         float r = CabH * 0.4f;
@@ -461,11 +517,12 @@ class MiniCalendar : Control
             float diam = Math.Min(celda.Width, celda.Height) * 0.82f;
             var circ = new RectangleF(celda.X + (celda.Width - diam) / 2f, celda.Y + (celda.Height - diam) / 2f, diam, diam);
 
-            var colTexto = Color.White;
+            var colTexto = Ui.Texto;
             if (fecha == sel.Date)
             {
                 using var azul = new SolidBrush(Ui.Azul);
                 g.FillEllipse(azul, circ);
+                colTexto = Color.White;
             }
             else
             {
@@ -478,6 +535,12 @@ class MiniCalendar : Control
             }
 
             TextRenderer.DrawText(g, d.ToString(), fDia, Rectangle.Round(celda), colTexto, centro);
+            if (TieneTareas?.Invoke(fecha) == true)
+            {
+                float punto = Math.Max(3f, Math.Min(5f, celda.Height * 0.11f));
+                using var marca = new SolidBrush(fecha == sel.Date ? Color.White : Ui.Naranja);
+                g.FillEllipse(marca, Width / 2f - punto / 2f, celda.Bottom - punto * 1.6f, punto, punto);
+            }
         }
     }
 
@@ -599,9 +662,12 @@ public class MainForm : Form
     readonly SettingsButton btnAjustes = new();
     readonly CloseButton btnCerrar = new();
     readonly RoundedPanel tarjeta = new();
+    readonly RoundedPanel barraFiltros = new();
     readonly RoundedPanel entrada = new();
     readonly RoundedPanel pildoraHora = new();
     readonly BufferedListBox lista = new();
+    readonly TextBox txtBuscar = new();
+    readonly SelectorRedondeado filtroTareas = new();
     readonly TextBox txtNueva = new();
     readonly MaskedTextBox txtHora = new();
     readonly PlusButton btnAnadir = new();
@@ -612,6 +678,8 @@ public class MainForm : Form
     readonly AjustesPanel panelAjustes = new();
     readonly UndoSnackbar snackbar = new();
     readonly System.Windows.Forms.Timer reloj = new();
+    readonly System.Windows.Forms.Timer animacionFilas = new();
+    readonly Dictionary<Guid, int> opacidadesFilas = new();
 
     readonly Font fNormal = new("Segoe UI", 11f);
     readonly Font fSub = new("Segoe UI", 8.5f);
@@ -623,16 +691,28 @@ public class MainForm : Form
     Icon? iconoActual;
     DateTime ultimoDia = DateTime.Today;
     int hover = -1;
+    int avisoPrevioMinutos = 60;
+    int duracionNotificacion = 2000;
+    int alturaVentanaNormal;
+    bool sonidoHabilitado = true;
+    bool inicioAutomaticoHabilitado = true;
+    bool temaClaroHabilitado;
+    bool mostrarVentanaAlIniciar;
+    int ubicacionNotificaciones;
+    readonly bool iniciadoPorWindows;
     bool salir;
     bool primeraVez = true;
-    readonly HashSet<(Tarea Tarea, int MinutosAntes)> recordatoriosMostrados = new();
+    readonly HashSet<(Guid Id, DateTime Fecha, int MinutosAntes)> recordatoriosMostrados = new();
     ToolStripMenuItem? itemDeshacerBorrado;
     Tarea? tareaEnEdicion;
+    Tarea? tareaContextual;
     ConfiguracionAtajo configuracionAtajo;
 
-    public MainForm()
+    public MainForm(bool iniciadoPorWindows = false)
     {
+        this.iniciadoPorWindows = iniciadoPorWindows;
         k = DeviceDpi / 96f;
+        Ui.EstablecerRadioEsquina(S(16));
         configuracionAtajo = CargarConfiguracionAtajo();
 
         // --- Ventana: sin bordes, oscura, tipo "popover" ---
@@ -679,12 +759,33 @@ public class MainForm : Form
         btnNext.Bounds = new Rectangle(btnAjustes.Left - S(36), S(14), S(32), S(32));
         btnPrev.Bounds = new Rectangle(btnNext.Left - S(48), S(14), S(32), S(32));
 
-        int y = lblSub.Bottom + S(10);
+        int y = lblSub.Bottom + S(8);
+
+        barraFiltros.Bounds = new Rectangle(margen, y, ancho - 2 * margen, S(34));
+        barraFiltros.Radius = Ui.RadioEsquina;
+        barraFiltros.Fill = Ui.Tarjeta;
+        barraFiltros.BackColor = Ui.Fondo;
+        txtBuscar.Bounds = new Rectangle(S(12), 0, S(168), S(34));
+        txtBuscar.BorderStyle = BorderStyle.None;
+        txtBuscar.BackColor = Ui.Tarjeta;
+        txtBuscar.ForeColor = Color.White;
+        txtBuscar.Font = new Font("Segoe UI", 9.5f);
+        txtBuscar.PlaceholderText = "Buscar tareas";
+        txtBuscar.Location = new Point(S(12), (barraFiltros.Height - txtBuscar.PreferredHeight) / 2);
+        filtroTareas.Bounds = new Rectangle(S(185), S(2), S(123), S(30));
+        filtroTareas.BackColor = Ui.Tarjeta;
+        filtroTareas.ForeColor = Color.White;
+        filtroTareas.Font = new Font("Segoe UI", 8.5f);
+        filtroTareas.Items.AddRange(new object[] { "Todas", "Pendientes", "Hechas", "Importantes", "Vencidas" });
+        filtroTareas.SelectedIndex = 0;
+        barraFiltros.Controls.AddRange(new Control[] { txtBuscar, filtroTareas });
+
+        y = barraFiltros.Bottom + S(8);
 
         // --- Tarjeta con la lista ---
         tarjeta.Bounds = new Rectangle(margen, y, ancho - 2 * margen, S(280));
         tarjeta.Padding = new Padding(0, S(10), 0, S(10));
-        tarjeta.Radius = S(16);
+        tarjeta.Radius = Ui.RadioEsquina;
         tarjeta.BackColor = Ui.Fondo;
 
         lista.Dock = DockStyle.Fill;
@@ -711,7 +812,7 @@ public class MainForm : Form
 
         // --- Campo de texto en forma de píldora + botón "+" ---
         entrada.Bounds = new Rectangle(margen, y, ancho - 2 * margen - boton - hueco, boton);
-        entrada.Radius = boton / 2;
+        entrada.Radius = Ui.RadioEsquina;
         entrada.BackColor = Ui.Fondo;
 
         txtNueva.BorderStyle = BorderStyle.None;
@@ -736,7 +837,7 @@ public class MainForm : Form
         chipFecha.Bounds = new Rectangle(margen, y, S(108), altoChip);
 
         pildoraHora.Bounds = new Rectangle(chipFecha.Right + separacion, y, S(70), altoChip);
-        pildoraHora.Radius = altoChip / 2;
+        pildoraHora.Radius = Ui.RadioEsquina;
         pildoraHora.BackColor = Ui.Fondo;
 
         txtHora.Mask = "00:00";
@@ -759,14 +860,17 @@ public class MainForm : Form
         chipImportante.Bounds = new Rectangle(xImp, y, ancho - margen - xImp, altoChip);
 
         ClientSize = new Size(ancho, chipFecha.Bottom + margen);
+        alturaVentanaNormal = ClientSize.Height;
 
         // --- Calendario (aparece encima de la lista al pulsar la fecha) ---
         calendario.Bounds = tarjeta.Bounds;
-        calendario.Radius = S(16);
+        calendario.Radius = Ui.RadioEsquina;
         calendario.Font = new Font("Segoe UI", 10f);
+        calendario.TieneTareas = controller.TieneTareas;
         calendario.Visible = false;
 
-        panelEdicion.Bounds = new Rectangle(tarjeta.Left, tarjeta.Top, tarjeta.Width, S(264));
+        panelEdicion.Bounds = new Rectangle(tarjeta.Left, tarjeta.Top, tarjeta.Width, S(304));
+        panelEdicion.Radius = Ui.RadioEsquina;
         panelEdicion.Visible = false;
         panelEdicion.Guardado += (_, tareaEditada) =>
         {
@@ -775,6 +879,7 @@ public class MainForm : Form
             tareaEnEdicion = null;
             panelEdicion.Visible = false;
             Refrescar();
+            AnimarTarea(tareaEditada);
         };
         panelEdicion.Cancelado += (_, _) =>
         {
@@ -782,9 +887,13 @@ public class MainForm : Form
             panelEdicion.Visible = false;
         };
 
-        panelAjustes.Bounds = new Rectangle(tarjeta.Left, tarjeta.Top, tarjeta.Width, S(264));
+        panelAjustes.Bounds = new Rectangle(tarjeta.Left, tarjeta.Top, tarjeta.Width,
+            Math.Max(S(320), alturaVentanaNormal - tarjeta.Top - margen));
+        panelAjustes.Radius = Ui.RadioEsquina;
+        panelAjustes.RecolocarBotones();
         panelAjustes.Visible = false;
         panelAjustes.Editar(configuracionAtajo);
+        CargarPreferencias();
         panelAjustes.Guardado += (_, nuevoAtajo) =>
         {
             if (!AplicarAtajo(nuevoAtajo))
@@ -796,23 +905,42 @@ public class MainForm : Form
 
             configuracionAtajo = nuevoAtajo;
             GuardarConfiguracionAtajo(nuevoAtajo);
-            panelAjustes.Visible = false;
+            avisoPrevioMinutos = panelAjustes.MinutosAviso;
+            duracionNotificacion = panelAjustes.DuracionNotificacion;
+            sonidoHabilitado = panelAjustes.SonidoHabilitado;
+            inicioAutomaticoHabilitado = panelAjustes.InicioAutomaticoHabilitado;
+            temaClaroHabilitado = panelAjustes.TemaClaroHabilitado;
+            mostrarVentanaAlIniciar = panelAjustes.MostrarAlIniciarHabilitado;
+            ubicacionNotificaciones = panelAjustes.UbicacionNotificacion;
+            Notificador.DuracionAviso = duracionNotificacion;
+            Notificador.Posicion = ubicacionNotificaciones;
+            GuardarPreferencias();
+            EstablecerInicioAutomatico(inicioAutomaticoHabilitado);
+            AplicarTema(temaClaroHabilitado);
+            MostrarAjustes(false);
         };
-        panelAjustes.Cancelado += (_, _) => panelAjustes.Visible = false;
+        panelAjustes.Cancelado += (_, _) => MostrarAjustes(false);
 
         snackbar.Bounds = new Rectangle(S(12), ClientSize.Height - S(52), ClientSize.Width - S(24), S(42));
         snackbar.DeshacerSolicitado += (_, _) => DeshacerBorrado();
 
         Controls.AddRange(new Control[]
         {
-            lblTitulo, lblSub, btnPrev, btnNext, btnAjustes, btnCerrar, tarjeta, entrada, btnAnadir,
+            lblTitulo, lblSub, btnPrev, btnNext, btnAjustes, btnCerrar, barraFiltros, tarjeta, entrada, btnAnadir,
             chipFecha, pildoraHora, chipImportante, calendario, panelEdicion, panelAjustes, snackbar
         });
         btnPrev.BringToFront();
         btnNext.BringToFront();
         btnAjustes.BringToFront();
         btnCerrar.BringToFront();
+        AplicarTema(temaClaroHabilitado);
         AcceptButton = btnAnadir; // Enter = añadir
+        Shown += (_, _) =>
+        {
+            if (!this.iniciadoPorWindows || !mostrarVentanaAlIniciar) return;
+            var area = Screen.PrimaryScreen!.WorkingArea;
+            Location = new Point(area.Right - Width - S(12), area.Bottom - Height - S(12));
+        };
 
         // --- Icono de bandeja y menú oscuro ---
         var menu = new ContextMenuStrip
@@ -824,6 +952,11 @@ public class MainForm : Form
             Font = new Font("Segoe UI", 10f)
         };
         menu.Items.Add("Abrir", null, (s, e) => BeginInvoke(new Action(Mostrar)));
+        menu.Items.Add("Exportar copia…", null, (s, e) => ExportarCopia());
+        menu.Items.Add("Restaurar copia…", null, (s, e) => RestaurarCopia());
+        menu.Items.Add("Acerca de Tareas", null, (s, e) => MessageBox.Show(this,
+            "Tareas\nRecordatorios sencillos desde la bandeja de Windows.", "Acerca de", MessageBoxButtons.OK, MessageBoxIcon.Information));
+        menu.Items.Add(new ToolStripSeparator());
         itemDeshacerBorrado = new ToolStripMenuItem("Deshacer borrado");
         menu.Items.Add(itemDeshacerBorrado);
         itemDeshacerBorrado.Enabled = false;
@@ -851,13 +984,13 @@ public class MainForm : Form
         Refrescar();
         tray.Visible = true;
 
-        // Arrancar automáticamente con Windows
-        RegistrarInicioAutomatico();
+        // Arrancar automáticamente con Windows si la opción sigue activada.
+        EstablecerInicioAutomatico(inicioAutomaticoHabilitado);
 
         // Aviso al arrancar si tienes tareas pendientes hoy
         int pendientes = PendientesHoy();
         if (pendientes > 0)
-            Notificador.Mostrar("Tareas de hoy", $"Tienes {pendientes} tarea(s) pendiente(s)");
+            Notificador.Mostrar("Tareas de hoy", $"Tienes {pendientes} tarea(s) pendiente(s)", sonidoHabilitado, duracionNotificacion);
 
         // --- Eventos ---
         btnPrev.Click += (s, e) => IrADia(dia.AddDays(-1));
@@ -866,15 +999,16 @@ public class MainForm : Form
         {
             if (panelAjustes.Visible)
             {
-                panelAjustes.Visible = false;
+                MostrarAjustes(false);
                 return;
             }
 
             calendario.Visible = false;
             panelEdicion.Visible = false;
             panelAjustes.Editar(configuracionAtajo);
-            panelAjustes.Visible = true;
-            panelAjustes.BringToFront();
+            panelAjustes.CargarPreferencias(avisoPrevioMinutos, duracionNotificacion, sonidoHabilitado,
+                inicioAutomaticoHabilitado, temaClaroHabilitado, ubicacionNotificaciones, mostrarVentanaAlIniciar);
+            MostrarAjustes(true);
         };
         btnCerrar.Click += (s, e) => Hide();
         lblTitulo.Click += (s, e) => IrADia(DateTime.Today);
@@ -890,6 +1024,8 @@ public class MainForm : Form
         txtHora.TextChanged += (s, e) => txtHora.ForeColor = Color.White;
 
         lista.DrawItem += DibujarItem;
+        txtBuscar.TextChanged += (_, _) => Refrescar();
+        filtroTareas.SelectedIndexChanged += (_, _) => Refrescar();
         lista.MouseMove += (s, e) =>
         {
             int i = lista.IndexFromPoint(e.Location);
@@ -898,10 +1034,43 @@ public class MainForm : Form
         lista.MouseLeave += (s, e) => { hover = -1; lista.Invalidate(); };
         lista.MouseDown += Lista_MouseDown;
         lista.DoubleClick += Lista_DoubleClick;
+        ConfigurarMenuTareas();
+        animacionFilas.Interval = 16;
+        animacionFilas.Tick += (_, _) =>
+        {
+            foreach (var id in opacidadesFilas.Keys.ToList())
+            {
+                opacidadesFilas[id] = Math.Min(255, opacidadesFilas[id] + 34);
+                if (opacidadesFilas[id] >= 255) opacidadesFilas.Remove(id);
+            }
+            lista.Invalidate();
+            if (opacidadesFilas.Count == 0) animacionFilas.Stop();
+        };
 
         KeyDown += (s, e) =>
         {
-            if (e.KeyCode == Keys.Escape && calendario.Visible) calendario.Visible = false;
+            if (e.KeyCode == Keys.Escape)
+            {
+                if (calendario.Visible) calendario.Visible = false;
+                else if (panelAjustes.Visible) MostrarAjustes(false);
+                else if (panelEdicion.Visible) panelEdicion.Visible = false;
+                else if (Visible) Hide();
+                e.Handled = true;
+            }
+            else if (e.Control && e.KeyCode == Keys.F) { txtBuscar.Focus(); txtBuscar.SelectAll(); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.N) { txtNueva.Focus(); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.Z) { DeshacerBorrado(); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.Left) { IrADia(dia.AddDays(-1)); e.Handled = true; }
+            else if (e.Control && e.KeyCode == Keys.Right) { IrADia(dia.AddDays(1)); e.Handled = true; }
+            else if (e.KeyCode == Keys.F2 && hover >= 0 && hover < visibles.Count) { AbrirEdicion(visibles[hover]); e.Handled = true; }
+            else if (e.KeyCode == Keys.Space && lista.Focused && hover >= 0 && hover < visibles.Count)
+            {
+                var tarea = visibles[hover];
+                controller.MarcarHecha(tarea, dia, !tarea.Hecha);
+                Refrescar();
+                AnimarTarea(tarea);
+                e.Handled = true;
+            }
         };
 
         // Cada minuto comprueba si ha cambiado el día (medianoche)
@@ -928,7 +1097,7 @@ public class MainForm : Form
         if (primeraVez)
         {
             primeraVez = false;
-            value = false;
+            value = value && iniciadoPorWindows && mostrarVentanaAlIniciar;
             if (!IsHandleCreated) CreateHandle();
         }
         base.SetVisibleCore(value);
@@ -957,7 +1126,17 @@ public class MainForm : Form
         }
         else
         {
-            using var path = Ui.RoundedRect(new Rectangle(0, 0, Width, Height), S(14));
+            using var path = Ui.RoundedRect(new Rectangle(0, 0, Width, Height), Ui.RadioEsquina);
+            Region = new Region(path);
+        }
+    }
+
+    protected override void OnSizeChanged(EventArgs e)
+    {
+        base.OnSizeChanged(e);
+        if (IsHandleCreated && Environment.OSVersion.Version.Build < 22000)
+        {
+            using var path = Ui.RoundedRect(new Rectangle(0, 0, Width, Height), Ui.RadioEsquina);
             Region = new Region(path);
         }
     }
@@ -1013,6 +1192,18 @@ public class MainForm : Form
         Activate();
         SetForegroundWindow(Handle);
         txtNueva.Focus();
+    }
+
+    void MostrarAjustes(bool mostrar)
+    {
+        panelAjustes.Visible = mostrar;
+        snackbar.Bounds = new Rectangle(S(12), ClientSize.Height - S(52), ClientSize.Width - S(24), S(42));
+        if (Visible)
+        {
+            var area = Screen.FromControl(this).WorkingArea;
+            Location = new Point(Math.Min(Location.X, area.Right - Width - S(12)), area.Bottom - Height - S(12));
+        }
+        if (mostrar) panelAjustes.BringToFront();
     }
 
     // ---------- Textos de fechas ----------
@@ -1083,11 +1274,16 @@ public class MainForm : Form
             g.DrawLine(sep, r.Left + S(32), r.Bottom - 1, r.Right - S(12), r.Bottom - 1);
         }
 
-        // Punto a la izquierda: naranja si es importante, gris si es normal
+        // El círculo funciona como casilla de tarea completada.
         int punto = S(8);
         var p = new Rectangle(r.Left + S(16), r.Top + (r.Height - punto) / 2, punto, punto);
-        using (var colorPunto = new SolidBrush(t.Importante ? Ui.Naranja : Color.FromArgb(99, 99, 102)))
+        using (var colorPunto = new SolidBrush(t.Hecha ? Ui.Verde : t.Importante ? Ui.Naranja : Color.FromArgb(99, 99, 102)))
             g.FillEllipse(colorPunto, p);
+        if (t.Hecha)
+        {
+            using var tick = new Pen(Color.White, Math.Max(1.2f, Sf(1.5f))) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawLines(tick, new[] { new PointF(p.Left + 1, p.Top + p.Height / 2f), new PointF(p.Left + p.Width / 2f, p.Bottom - 1), new PointF(p.Right + 2, p.Top - 1) });
+        }
 
         // Título y, si hay, el texto pequeño de debajo
         int xTexto = r.Left + S(32);
@@ -1095,14 +1291,23 @@ public class MainForm : Form
         var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
 
         var (sub, colorSub) = Subtitulo(t, destacada);
+        int opacidad = opacidadesFilas.GetValueOrDefault(t.Id, 255);
+        Color colorTitulo = Mezclar(Ui.Tarjeta, t.Hecha ? Ui.Gris : Ui.Texto, opacidad);
         if (sub == null)
         {
-            TextRenderer.DrawText(g, t.Titulo, fNormal, new Rectangle(xTexto, r.Top, anchoTexto, r.Height), Color.White, flags);
+            TextRenderer.DrawText(g, t.Titulo, fNormal, new Rectangle(xTexto, r.Top, anchoTexto, r.Height), colorTitulo, flags);
         }
         else
         {
-            TextRenderer.DrawText(g, t.Titulo, fNormal, new Rectangle(xTexto, r.Top + S(6), anchoTexto, S(24)), Color.White, flags);
+            TextRenderer.DrawText(g, t.Titulo, fNormal, new Rectangle(xTexto, r.Top + S(6), anchoTexto, S(24)), colorTitulo, flags);
             TextRenderer.DrawText(g, sub, fSub, new Rectangle(xTexto, r.Top + S(28), anchoTexto, S(18)), colorSub, flags);
+        }
+        if (t.Hecha)
+        {
+            var tituloTamano = TextRenderer.MeasureText(t.Titulo, fNormal, new Size(anchoTexto, S(24)), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            float yTachado = sub == null ? r.Top + r.Height / 2f : r.Top + S(18);
+            using var tachado = new Pen(Ui.Gris, Math.Max(1f, Sf(1f)));
+            g.DrawLine(tachado, xTexto, yTachado, xTexto + Math.Min(anchoTexto, tituloTamano.Width), yTachado);
         }
 
         // Aspa para borrar: siempre visible en gris y roja al pasar el ratón por la fila
@@ -1124,7 +1329,16 @@ public class MainForm : Form
         int i = lista.IndexFromPoint(e.Location);
         if (i < 0 || i >= visibles.Count) return;
 
-        // Solo el aspa elimina la tarea; hacer clic en el resto de la fila no hace nada
+        if (e.X <= S(34))
+        {
+            var tarea = visibles[i];
+            controller.MarcarHecha(tarea, dia, !tarea.Hecha);
+            Refrescar();
+            AnimarTarea(tarea);
+            return;
+        }
+
+        // El aspa sigue siendo el acceso rápido para borrar.
         if (e.X <= lista.ClientSize.Width - S(44)) return;
 
         var eliminada = visibles[i];
@@ -1141,12 +1355,55 @@ public class MainForm : Form
         if (i < 0 || i >= visibles.Count) return;
 
         var punto = lista.PointToClient(Cursor.Position);
-        if (punto.X > lista.ClientSize.Width - S(44)) return;
+        if (punto.X <= S(34) || punto.X > lista.ClientSize.Width - S(44)) return;
 
-        tareaEnEdicion = visibles[i];
+        AbrirEdicion(visibles[i]);
+    }
+
+    void AbrirEdicion(Tarea tarea)
+    {
+        tareaEnEdicion = tarea;
         panelEdicion.Editar(tareaEnEdicion);
         panelEdicion.Visible = true;
         panelEdicion.BringToFront();
+    }
+
+    void ConfigurarMenuTareas()
+    {
+        var menu = new ContextMenuStrip
+        {
+            ShowImageMargin = false,
+            Renderer = new ToolStripProfessionalRenderer(new ColoresOscuros()) { RoundedEdges = false },
+            BackColor = Ui.Tarjeta,
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9.5f)
+        };
+        menu.Items.Add("Marcar como hecha / pendiente", null, (_, _) =>
+        {
+            if (tareaContextual == null) return;
+            controller.MarcarHecha(tareaContextual, dia, !tareaContextual.Hecha);
+            Refrescar();
+            AnimarTarea(tareaContextual);
+        });
+        menu.Items.Add("Editar tarea", null, (_, _) => { if (tareaContextual != null) AbrirEdicion(tareaContextual); });
+        menu.Items.Add("Eliminar tarea", null, (_, _) =>
+        {
+            if (tareaContextual == null) return;
+            controller.Eliminar(tareaContextual);
+            borradas.Push(tareaContextual);
+            if (itemDeshacerBorrado != null) itemDeshacerBorrado.Enabled = true;
+            snackbar.Mostrar(tareaContextual.Titulo);
+            Refrescar();
+        });
+        menu.Opening += (_, e) => e.Cancel = tareaContextual == null;
+        lista.ContextMenuStrip = menu;
+        lista.MouseDown += (_, e) =>
+        {
+            if (e.Button != MouseButtons.Right) return;
+            int i = lista.IndexFromPoint(e.Location);
+            tareaContextual = i >= 0 && i < visibles.Count ? visibles[i] : null;
+            if (tareaContextual == null) menu.Close();
+        };
     }
 
     void DeshacerBorrado()
@@ -1157,6 +1414,41 @@ public class MainForm : Form
         if (itemDeshacerBorrado != null)
             itemDeshacerBorrado.Enabled = borradas.Count > 0;
         Refrescar();
+    }
+
+    void ExportarCopia()
+    {
+        using var dialogo = new SaveFileDialog
+        {
+            Title = "Guardar copia de seguridad",
+            Filter = "Copia de tareas (*.json)|*.json",
+            FileName = $"tareas-{DateTime.Now:yyyy-MM-dd}.json",
+            DefaultExt = "json",
+            AddExtension = true
+        };
+        if (dialogo.ShowDialog(this) != DialogResult.OK) return;
+        File.WriteAllText(dialogo.FileName, JsonSerializer.Serialize(controller.Tareas, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    void RestaurarCopia()
+    {
+        using var dialogo = new OpenFileDialog
+        {
+            Title = "Restaurar copia de seguridad",
+            Filter = "Copia de tareas (*.json)|*.json|Todos los archivos (*.*)|*.*"
+        };
+        if (dialogo.ShowDialog(this) != DialogResult.OK) return;
+        if (MessageBox.Show(this, "La restauración reemplazará la lista actual de tareas. ¿Continuar?", "Restaurar copia",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        try
+        {
+            controller.ReemplazarDesdeArchivo(dialogo.FileName);
+            Refrescar();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "No se pudo restaurar la copia: " + ex.Message, "Error al restaurar", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     // ---------- Lógica de tareas ----------
@@ -1219,21 +1511,53 @@ public class MainForm : Form
             IrADia(fecha.Date);
         else
             Refrescar();
+        AnimarTarea(nueva);
     }
 
     void Refrescar()
     {
         hover = -1;
         lista.Items.Clear();
-        visibles = TareasDelDia(dia);
+        IEnumerable<Tarea> resultado = TareasDelDia(dia);
+        string consulta = txtBuscar.Text.Trim();
+        if (consulta.Length > 0)
+            resultado = resultado.Where(t => t.Titulo.Contains(consulta, StringComparison.CurrentCultureIgnoreCase));
+        resultado = (filtroTareas.SelectedIndex) switch
+        {
+            1 => resultado.Where(t => !t.Hecha),
+            2 => resultado.Where(t => t.Hecha),
+            3 => resultado.Where(t => t.Importante),
+            4 => resultado.Where(t => !t.Hecha && (t.ConHora ? t.Fecha < DateTime.Now : t.Fecha.Date < dia.Date)),
+            _ => resultado
+        };
+        visibles = resultado.ToList();
         foreach (var t in visibles)
             lista.Items.Add(t.Titulo);
 
+        lblVacio.Text = txtBuscar.TextLength > 0 || filtroTareas.SelectedIndex > 0
+            ? "No hay resultados"
+            : "No hay tareas";
         lblVacio.Visible = visibles.Count == 0;
         if (lblVacio.Visible) lblVacio.BringToFront();
 
         ActualizarCabecera();
         ActualizarIcono();
+    }
+
+    void AnimarTarea(Tarea tarea)
+    {
+        if (!visibles.Any(t => t.Id == tarea.Id)) return;
+        opacidadesFilas[tarea.Id] = 0;
+        if (!animacionFilas.Enabled) animacionFilas.Start();
+    }
+
+    static Color Mezclar(Color desde, Color hasta, int opacidad)
+    {
+        float p = Math.Clamp(opacidad / 255f, 0f, 1f);
+        return Color.FromArgb(
+            (int)(desde.R + (hasta.R - desde.R) * p),
+            (int)(desde.G + (hasta.G - desde.G) * p),
+            (int)(desde.B + (hasta.B - desde.B) * p));
     }
 
     void ActualizarCabecera()
@@ -1248,8 +1572,11 @@ public class MainForm : Form
         string fechaTxt = dia.ToString("dddd d 'de' MMMM", es);
         fechaTxt = char.ToUpper(fechaTxt[0]) + fechaTxt[1..];
 
-        int n = visibles.Count;
-        lblSub.Text = n == 0 ? fechaTxt : $"{fechaTxt} · {n} tarea{(n == 1 ? "" : "s")}";
+        int pendientes = visibles.Count(t => !t.Hecha);
+        int total = visibles.Count;
+        lblSub.Text = total == 0 ? fechaTxt : pendientes == total
+            ? $"{fechaTxt} · {total} tarea{(total == 1 ? "" : "s")}"
+            : $"{fechaTxt} · {pendientes} pendientes · {total} tareas";
     }
 
     // ---------- Icono con número ----------
@@ -1264,19 +1591,21 @@ public class MainForm : Form
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             g.Clear(Color.Transparent);
 
-            // Verde si no queda nada, rojo si hay pendientes
-            using var fondo = new SolidBrush(n == 0 ? Ui.Verde : Ui.Rojo);
-            g.FillEllipse(fondo, 0, 0, 31, 31);
+            using (var fondo = new SolidBrush(Ui.Azul))
+            using (var forma = Ui.RoundedRect(new Rectangle(1, 1, 30, 30), 8))
+                g.FillPath(fondo, forma);
+            using (var tick = new Pen(Color.White, 3.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                g.DrawLines(tick, new[] { new Point(6, 16), new Point(12, 22), new Point(24, 9) });
 
-            string texto = n > 99 ? "99+" : n.ToString();
-            float tam = texto.Length == 1 ? 22 : texto.Length == 2 ? 18 : 12;
-            using var fuente = new Font("Segoe UI", tam, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var formato = new StringFormat
+            if (n > 0)
             {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center
-            };
-            g.DrawString(texto, fuente, Brushes.White, new RectangleF(0, 0, 32, 33), formato);
+                using var fondoNumero = new SolidBrush(Ui.Rojo);
+                g.FillEllipse(fondoNumero, 15, 0, 17, 17);
+                string texto = n > 9 ? "9+" : n.ToString();
+                using var fuente = new Font("Segoe UI", texto.Length == 1 ? 10f : 7.5f, FontStyle.Bold, GraphicsUnit.Pixel);
+                using var formato = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                g.DrawString(texto, fuente, Brushes.White, new RectangleF(15, 0, 17, 17), formato);
+            }
         }
 
         IntPtr handle = bmp.GetHicon();
@@ -1296,7 +1625,12 @@ public class MainForm : Form
     {
         DateTime ahora = DateTime.Now;
 
-        foreach (var tarea in controller.Tareas.Where(t => t.ConHora))
+        var ocurrenciasHoy = controller.ObtenerParaDia(ahora.Date)
+            .Concat(controller.ObtenerParaDia(ahora.Date.AddDays(1)))
+            .Where(t => t.ConHora && !t.Hecha)
+            .DistinctBy(t => (t.Id, t.Fecha));
+
+        foreach (var tarea in ocurrenciasHoy)
         {
             if (alIniciar)
             {
@@ -1305,13 +1639,13 @@ public class MainForm : Form
                 TimeSpan tiempoRestante = tarea.Fecha - ahora;
                 if (tiempoRestante > TimeSpan.Zero && tiempoRestante <= TimeSpan.FromMinutes(15))
                     MostrarRecordatorio(tarea, 15);
-                else if (tiempoRestante > TimeSpan.FromMinutes(15) && tiempoRestante <= TimeSpan.FromHours(1))
-                    MostrarRecordatorio(tarea, 60);
+                else if (tiempoRestante > TimeSpan.FromMinutes(15) && tiempoRestante <= TimeSpan.FromMinutes(avisoPrevioMinutos))
+                    MostrarRecordatorio(tarea, avisoPrevioMinutos);
 
                 continue;
             }
 
-            MostrarRecordatorioSiCorresponde(tarea, ahora, 60);
+            MostrarRecordatorioSiCorresponde(tarea, ahora, avisoPrevioMinutos);
             MostrarRecordatorioSiCorresponde(tarea, ahora, 15);
         }
     }
@@ -1320,7 +1654,7 @@ public class MainForm : Form
     {
         DateTime momentoAviso = tarea.Fecha.AddMinutes(-minutosAntes);
         bool dentroDeLaVentana = ahora >= momentoAviso && ahora < momentoAviso.AddMinutes(2);
-        var clave = (tarea, minutosAntes);
+        var clave = (tarea.Id, tarea.Fecha, minutosAntes);
 
         if (!dentroDeLaVentana || !recordatoriosMostrados.Add(clave)) return;
 
@@ -1329,28 +1663,106 @@ public class MainForm : Form
 
     void MostrarRecordatorio(Tarea tarea, int minutosAntes)
     {
-        recordatoriosMostrados.Add((tarea, minutosAntes));
+        recordatoriosMostrados.Add((tarea.Id, tarea.Fecha, minutosAntes));
 
         string texto = minutosAntes == 60
             ? $"Falta menos de 1 hora para: {tarea.Titulo}"
-            : $"Faltan menos de 15 minutos para: {tarea.Titulo}";
+            : $"Faltan menos de {minutosAntes} minutos para: {tarea.Titulo}";
 
-        Notificador.Mostrar("Recordatorio de tarea", texto);
+        Notificador.Mostrar("Recordatorio de tarea", texto, sonidoHabilitado, duracionNotificacion,
+            () => BeginInvoke(new Action(() =>
+            {
+                Mostrar();
+                IrADia(tarea.Fecha.Date);
+            })));
     }
 
     // ---------- Inicio automático con Windows ----------
     // Cada vez que se abre la app se registra la ruta de ese .exe para el próximo arranque
-    static void RegistrarInicioAutomatico()
+    static void EstablecerInicioAutomatico(bool habilitado)
     {
         try
         {
             using var clave = Registry.CurrentUser.CreateSubKey(ClaveInicio);
-            clave?.SetValue(NombreApp, $"\"{Application.ExecutablePath}\"");
+            if (habilitado)
+                clave?.SetValue(NombreApp, $"\"{Application.ExecutablePath}\" --inicio-windows");
+            else
+                clave?.DeleteValue(NombreApp, false);
         }
         catch
         {
             // Si no se puede escribir en el registro, la app sigue funcionando igual
         }
+    }
+
+    void CargarPreferencias()
+    {
+        try
+        {
+            using var clave = Registry.CurrentUser.OpenSubKey(@"Software\TareasBandeja");
+            avisoPrevioMinutos = Convert.ToInt32(clave?.GetValue("AvisoPrevio") ?? 60) <= 30 ? 30 : 60;
+            int duracion = Convert.ToInt32(clave?.GetValue("DuracionNotificacion") ?? 2000);
+            duracionNotificacion = duracion <= 2000 ? 2000 : duracion <= 4000 ? 4000 : 6000;
+            sonidoHabilitado = Convert.ToInt32(clave?.GetValue("SonidoHabilitado") ?? 1) != 0;
+            inicioAutomaticoHabilitado = Convert.ToInt32(clave?.GetValue("InicioAutomatico") ?? 1) != 0;
+            temaClaroHabilitado = Convert.ToInt32(clave?.GetValue("TemaClaro") ?? 0) != 0;
+            ubicacionNotificaciones = Math.Clamp(Convert.ToInt32(clave?.GetValue("UbicacionNotificaciones") ?? 0), 0, 3);
+            mostrarVentanaAlIniciar = Convert.ToInt32(clave?.GetValue("MostrarAlIniciar") ?? 0) != 0;
+        }
+        catch { }
+        Notificador.DuracionAviso = duracionNotificacion;
+        Notificador.Posicion = ubicacionNotificaciones;
+        panelAjustes.CargarPreferencias(avisoPrevioMinutos, duracionNotificacion, sonidoHabilitado,
+            inicioAutomaticoHabilitado, temaClaroHabilitado, ubicacionNotificaciones, mostrarVentanaAlIniciar);
+    }
+
+    void GuardarPreferencias()
+    {
+        try
+        {
+            using var clave = Registry.CurrentUser.CreateSubKey(@"Software\TareasBandeja");
+            clave?.SetValue("AvisoPrevio", avisoPrevioMinutos, RegistryValueKind.DWord);
+            clave?.SetValue("DuracionNotificacion", duracionNotificacion, RegistryValueKind.DWord);
+            clave?.SetValue("SonidoHabilitado", sonidoHabilitado ? 1 : 0, RegistryValueKind.DWord);
+            clave?.SetValue("InicioAutomatico", inicioAutomaticoHabilitado ? 1 : 0, RegistryValueKind.DWord);
+            clave?.SetValue("TemaClaro", temaClaroHabilitado ? 1 : 0, RegistryValueKind.DWord);
+            clave?.SetValue("UbicacionNotificaciones", ubicacionNotificaciones, RegistryValueKind.DWord);
+            clave?.SetValue("MostrarAlIniciar", mostrarVentanaAlIniciar ? 1 : 0, RegistryValueKind.DWord);
+        }
+        catch { }
+    }
+
+    void AplicarTema(bool claro)
+    {
+        var fondoAnterior = Ui.Fondo;
+        var tarjetaAnterior = Ui.Tarjeta;
+        var hoverAnterior = Ui.Hover;
+        var separadorAnterior = Ui.Separador;
+        var grisAnterior = Ui.Gris;
+        var textoAnterior = Ui.Texto;
+        Ui.EstablecerTema(claro);
+        BackColor = Ui.Fondo;
+        AplicarPaleta(this, fondoAnterior, tarjetaAnterior, hoverAnterior, separadorAnterior, grisAnterior, textoAnterior);
+        Invalidate(true);
+    }
+
+    static void AplicarPaleta(Control control, Color fondoViejo, Color tarjetaVieja, Color hoverViejo,
+        Color separadorViejo, Color grisViejo, Color textoViejo)
+    {
+        Color fondoOriginal = control.BackColor;
+        bool superficieNeutra = fondoOriginal == fondoViejo || fondoOriginal == tarjetaVieja || fondoOriginal == hoverViejo;
+        if (fondoOriginal == fondoViejo) control.BackColor = Ui.Fondo;
+        else if (fondoOriginal == tarjetaVieja) control.BackColor = Ui.Tarjeta;
+        else if (fondoOriginal == hoverViejo) control.BackColor = Ui.Hover;
+        else if (fondoOriginal == separadorViejo) control.BackColor = Ui.Separador;
+        if (control.ForeColor == grisViejo) control.ForeColor = Ui.Gris;
+        else if (control.ForeColor == textoViejo &&
+            (superficieNeutra || control is Label or TextBox or MaskedTextBox or ComboBox or CheckBox or Chip))
+            control.ForeColor = Ui.Texto;
+        if (control is RoundedPanel panel && panel.Fill == tarjetaVieja) panel.Fill = Ui.Tarjeta;
+        if (control is Chip chip && chip.ColorInactivo == tarjetaVieja) chip.ColorInactivo = Ui.Tarjeta;
+        if (control is RoundedPanel rounded) rounded.Invalidate();
+        foreach (Control hijo in control.Controls) AplicarPaleta(hijo, fondoViejo, tarjetaVieja, hoverViejo, separadorViejo, grisViejo, textoViejo);
     }
 
     static ConfiguracionAtajo CargarConfiguracionAtajo()
@@ -1390,6 +1802,7 @@ public class MainForm : Form
             tray.Dispose();
             iconoActual?.Dispose();
             reloj.Dispose();
+            animacionFilas.Dispose();
             fNormal.Dispose();
             fSub.Dispose();
         }

@@ -12,7 +12,10 @@ namespace TareasBandeja;
 public class Tarea
 {
     public string Titulo { get; set; } = "";
-    public DateTime Fecha { get; set; } = DateTime.Today;
+    public DateTime Fecha { get; set; } = DateTime.Today;  // día (y hora, si ConHora) de la tarea o de la entrega
+    public bool ConHora { get; set; }
+    public bool Importante { get; set; }                   // las importantes salen todos los días hasta que se hagan
+    public DateTime Creada { get; set; } = DateTime.Today;
     public bool Hecha { get; set; }
 }
 
@@ -45,6 +48,7 @@ static class Ui
     public static readonly Color AzulClaro = Color.FromArgb(64, 156, 255);
     public static readonly Color Verde = Color.FromArgb(48, 209, 88);
     public static readonly Color Rojo = Color.FromArgb(255, 69, 58);
+    public static readonly Color Naranja = Color.FromArgb(255, 159, 10);
 
     public static GraphicsPath RoundedRect(Rectangle r, int radius)
     {
@@ -56,6 +60,24 @@ static class Ui
         p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
         p.CloseFigure();
         return p;
+    }
+
+    // Dibuja una flecha ‹ o ›
+    public static void Chevron(Graphics g, float cx, float cy, float ancho, float alto, bool derecha, Color color, float grosor)
+    {
+        float dir = derecha ? -1f : 1f;
+        using var pen = new Pen(color, grosor)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+            LineJoin = LineJoin.Round
+        };
+        g.DrawLines(pen, new[]
+        {
+            new PointF(cx + dir * ancho, cy - alto),
+            new PointF(cx - dir * ancho, cy),
+            new PointF(cx + dir * ancho, cy + alto)
+        });
     }
 }
 
@@ -153,22 +175,273 @@ class ChevronButton : Button
             g.FillEllipse(fondo, 0, 0, Width - 1, Height - 1);
         }
 
-        float cx = Width / 2f, cy = Height / 2f;
-        float ancho = Width * 0.08f, alto = Width * 0.19f;
-        float dir = Derecha ? -1f : 1f;
+        Ui.Chevron(g, Width / 2f, Height / 2f, Width * 0.08f, Width * 0.19f, Derecha, Ui.Azul, Width / 14f);
+    }
+}
 
-        using var pen = new Pen(Ui.Azul, Width / 14f)
+// "Chip" redondo: sirve de botón (fecha) o de casilla (importante)
+class Chip : Control
+{
+    bool hover, marcado;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool ConCasilla { get; set; }
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color ColorActivo { get; set; } = Ui.Azul;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Checked
+    {
+        get => marcado;
+        set { marcado = value; Invalidate(); }
+    }
+
+    public Chip()
+    {
+        DoubleBuffered = true;
+        Cursor = Cursors.Hand;
+        SetStyle(ControlStyles.Selectable, false);
+        TabStop = false;
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
+
+    protected override void OnClick(EventArgs e)
+    {
+        if (ConCasilla) Checked = !Checked;
+        base.OnClick(e);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(Ui.Fondo);
+
+        using (var path = Ui.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), Height / 2))
+        using (var fondo = new SolidBrush(marcado ? ColorActivo : hover ? Ui.Hover : Ui.Tarjeta))
+            g.FillPath(fondo, path);
+
+        var colTexto = marcado ? Color.White : ConCasilla ? Ui.Gris : Color.White;
+        var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis;
+
+        if (ConCasilla)
         {
-            StartCap = LineCap.Round,
-            EndCap = LineCap.Round,
-            LineJoin = LineJoin.Round
-        };
-        g.DrawLines(pen, new[]
+            float d = Height * 0.5f;
+            var c = new RectangleF(Height * 0.3f, (Height - d) / 2f, d, d);
+            if (marcado)
+            {
+                g.FillEllipse(Brushes.White, c);
+                using var pen = new Pen(ColorActivo, d / 8f)
+                {
+                    StartCap = LineCap.Round,
+                    EndCap = LineCap.Round,
+                    LineJoin = LineJoin.Round
+                };
+                g.DrawLines(pen, new[]
+                {
+                    new PointF(c.X + c.Width * 0.27f, c.Y + c.Height * 0.52f),
+                    new PointF(c.X + c.Width * 0.45f, c.Y + c.Height * 0.70f),
+                    new PointF(c.X + c.Width * 0.74f, c.Y + c.Height * 0.32f)
+                });
+            }
+            else
+            {
+                using var pen = new Pen(Color.FromArgb(99, 99, 102), Math.Max(1.5f, d / 10f));
+                g.DrawEllipse(pen, c);
+            }
+
+            int x = (int)(c.Right + Height * 0.18f);
+            var rect = new Rectangle(x, 0, Width - x - (int)(Height * 0.2f), Height);
+            TextRenderer.DrawText(g, Text, Font, rect, colTexto, flags | TextFormatFlags.Left);
+        }
+        else
         {
-            new PointF(cx + dir * ancho, cy - alto),
-            new PointF(cx - dir * ancho, cy),
-            new PointF(cx + dir * ancho, cy + alto)
-        });
+            TextRenderer.DrawText(g, Text, Font, new Rectangle(0, 0, Width, Height), colTexto,
+                flags | TextFormatFlags.HorizontalCenter);
+        }
+    }
+}
+
+// Calendario oscuro para elegir el día
+class MiniCalendar : Control
+{
+    static readonly CultureInfo es = new("es-ES");
+
+    DateTime mes = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    DateTime sel = DateTime.Today;
+    int hoverDia = -1;
+    int hoverNav = 0;
+
+    public event EventHandler<DateTime>? DiaElegido;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public int Radius { get; set; } = 16;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public DateTime Seleccionado
+    {
+        get => sel;
+        set
+        {
+            sel = value.Date;
+            mes = new DateTime(sel.Year, sel.Month, 1);
+            Invalidate();
+        }
+    }
+
+    public MiniCalendar() { DoubleBuffered = true; }
+
+    // --- Geometría ---
+    float CabH => Height * 0.15f;
+    float SemH => Height * 0.08f;
+    float Arriba => CabH + SemH;
+    float CeldaW => Width / 7f;
+    float CeldaH => (Height - Arriba - Height * 0.03f) / 6f;
+    int Offset => ((int)mes.DayOfWeek + 6) % 7;   // la semana empieza en lunes
+    int DiasMes => DateTime.DaysInMonth(mes.Year, mes.Month);
+
+    RectangleF Celda(int dia)
+    {
+        int i = dia - 1 + Offset;
+        return new RectangleF((i % 7) * CeldaW, Arriba + (i / 7) * CeldaH, CeldaW, CeldaH);
+    }
+
+    int DiaEn(Point p)
+    {
+        if (p.Y < Arriba) return -1;
+        int col = (int)(p.X / CeldaW);
+        int fila = (int)((p.Y - Arriba) / CeldaH);
+        if (col < 0 || col > 6 || fila < 0 || fila > 5) return -1;
+        int d = fila * 7 + col - Offset + 1;
+        return d >= 1 && d <= DiasMes ? d : -1;
+    }
+
+    int NavEn(Point p)
+    {
+        if (p.Y > CabH) return 0;
+        if (p.X < Width * 0.2f) return -1;
+        if (p.X > Width * 0.8f) return 1;
+        return 0;
+    }
+
+    // --- Dibujo ---
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(Ui.Fondo);
+
+        using (var path = Ui.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), Radius))
+        using (var fondo = new SolidBrush(Ui.Tarjeta))
+            g.FillPath(fondo, path);
+
+        using var fTit = new Font("Segoe UI", 12f, FontStyle.Bold);
+        using var fSem = new Font("Segoe UI", 9f, FontStyle.Bold);
+        using var fDia = new Font("Segoe UI", 10.5f);
+        var centro = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding;
+
+        // Mes y año
+        string titulo = mes.ToString("MMMM yyyy", es);
+        titulo = char.ToUpper(titulo[0]) + titulo[1..];
+        TextRenderer.DrawText(g, titulo, fTit, new Rectangle(0, 0, Width, (int)CabH), Color.White, centro);
+
+        // Flechas de mes
+        float r = CabH * 0.4f;
+        foreach (int lado in new[] { -1, 1 })
+        {
+            float cx = lado == -1 ? Width * 0.10f : Width * 0.90f;
+            float cy = CabH / 2f;
+            if (hoverNav == lado)
+            {
+                using var bg = new SolidBrush(Ui.Hover);
+                g.FillEllipse(bg, cx - r, cy - r, r * 2, r * 2);
+            }
+            Ui.Chevron(g, cx, cy, r * 0.22f, r * 0.5f, lado == 1, Ui.Azul, Math.Max(2f, r / 6f));
+        }
+
+        // Días de la semana
+        string[] sem = { "L", "M", "X", "J", "V", "S", "D" };
+        for (int i = 0; i < 7; i++)
+        {
+            var rs = new Rectangle((int)(i * CeldaW), (int)CabH, (int)CeldaW, (int)SemH);
+            TextRenderer.DrawText(g, sem[i], fSem, rs, Ui.Gris, centro);
+        }
+
+        // Días del mes
+        for (int d = 1; d <= DiasMes; d++)
+        {
+            var celda = Celda(d);
+            var fecha = new DateTime(mes.Year, mes.Month, d);
+            float diam = Math.Min(celda.Width, celda.Height) * 0.82f;
+            var circ = new RectangleF(celda.X + (celda.Width - diam) / 2f, celda.Y + (celda.Height - diam) / 2f, diam, diam);
+
+            var colTexto = Color.White;
+            if (fecha == sel.Date)
+            {
+                using var azul = new SolidBrush(Ui.Azul);
+                g.FillEllipse(azul, circ);
+            }
+            else
+            {
+                if (d == hoverDia)
+                {
+                    using var gris = new SolidBrush(Ui.Hover);
+                    g.FillEllipse(gris, circ);
+                }
+                if (fecha == DateTime.Today) colTexto = Ui.Azul;
+            }
+
+            TextRenderer.DrawText(g, d.ToString(), fDia, Rectangle.Round(celda), colTexto, centro);
+        }
+    }
+
+    // --- Ratón ---
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        int dh = DiaEn(e.Location);
+        int nh = NavEn(e.Location);
+        if (dh != hoverDia || nh != hoverNav)
+        {
+            hoverDia = dh;
+            hoverNav = nh;
+            Cursor = (dh > 0 || nh != 0) ? Cursors.Hand : Cursors.Default;
+            Invalidate();
+        }
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        hoverDia = -1;
+        hoverNav = 0;
+        Invalidate();
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (e.Button != MouseButtons.Left) return;
+
+        int nav = NavEn(e.Location);
+        if (nav != 0)
+        {
+            mes = mes.AddMonths(nav);
+            Invalidate();
+            return;
+        }
+
+        int d = DiaEn(e.Location);
+        if (d > 0)
+        {
+            sel = new DateTime(mes.Year, mes.Month, d);
+            Invalidate();
+            DiaElegido?.Invoke(this, sel);
+        }
     }
 }
 
@@ -221,8 +494,9 @@ public class MainForm : Form
         "TareasBandeja", "tareas.json");
 
     readonly List<Tarea> tareas = new();
-    List<Tarea> visibles = new();   // tareas del día que se está mostrando
-    DateTime dia = DateTime.Today;  // día que se está viendo
+    List<Tarea> visibles = new();     // lo que se muestra en la lista del día actual
+    DateTime dia = DateTime.Today;    // día que se está viendo
+    DateTime fechaNueva = DateTime.Today; // fecha elegida para la tarea que se va a crear
 
     readonly NotifyIcon tray = new();
     readonly Label lblTitulo = new();
@@ -232,13 +506,19 @@ public class MainForm : Form
     readonly ChevronButton btnNext = new();
     readonly RoundedPanel tarjeta = new();
     readonly RoundedPanel entrada = new();
+    readonly RoundedPanel pildoraHora = new();
     readonly BufferedListBox lista = new();
     readonly TextBox txtNueva = new();
+    readonly MaskedTextBox txtHora = new();
     readonly PlusButton btnAnadir = new();
+    readonly Chip chipFecha = new();
+    readonly Chip chipImportante = new();
+    readonly MiniCalendar calendario = new();
     readonly System.Windows.Forms.Timer reloj = new();
 
     readonly Font fNormal = new("Segoe UI", 11f);
     readonly Font fHecha = new("Segoe UI", 11f, FontStyle.Strikeout);
+    readonly Font fSub = new("Segoe UI", 8.5f);
 
     readonly float k;   // factor de escala según el zoom de Windows (100% = 1, 150% = 1.5...)
     int S(int v) => (int)Math.Round(v * k);
@@ -292,7 +572,7 @@ public class MainForm : Form
         int y = lblSub.Bottom + S(10);
 
         // --- Tarjeta con la lista ---
-        tarjeta.Bounds = new Rectangle(margen, y, ancho - 2 * margen, S(300));
+        tarjeta.Bounds = new Rectangle(margen, y, ancho - 2 * margen, S(280));
         tarjeta.Padding = new Padding(0, S(10), 0, S(10));
         tarjeta.Radius = S(16);
         tarjeta.BackColor = Ui.Fondo;
@@ -301,7 +581,7 @@ public class MainForm : Form
         lista.BorderStyle = BorderStyle.None;
         lista.BackColor = Ui.Tarjeta;
         lista.DrawMode = DrawMode.OwnerDrawFixed;
-        lista.ItemHeight = S(46);
+        lista.ItemHeight = S(52);
         lista.SelectionMode = SelectionMode.None;
         lista.IntegralHeight = false;
         lista.HandleCreated += (s, e) => SetWindowTheme(lista.Handle, "DarkMode_Explorer", null); // scrollbar oscura
@@ -336,11 +616,50 @@ public class MainForm : Form
 
         btnAnadir.Bounds = new Rectangle(entrada.Right + hueco, y, boton, boton);
 
-        ClientSize = new Size(ancho, entrada.Bottom + margen);
+        y = entrada.Bottom + S(10);
+
+        // --- Fila de opciones: fecha, hora e importante ---
+        int altoChip = S(32);
+        int separacion = S(8);
+
+        chipFecha.Font = new Font("Segoe UI", 9.5f);
+        chipFecha.Bounds = new Rectangle(margen, y, S(108), altoChip);
+
+        pildoraHora.Bounds = new Rectangle(chipFecha.Right + separacion, y, S(70), altoChip);
+        pildoraHora.Radius = altoChip / 2;
+        pildoraHora.BackColor = Ui.Fondo;
+
+        txtHora.Mask = "00:00";
+        txtHora.PromptChar = '-';
+        txtHora.HidePromptOnLeave = false;
+        txtHora.BorderStyle = BorderStyle.None;
+        txtHora.BackColor = Ui.Tarjeta;
+        txtHora.ForeColor = Color.White;
+        txtHora.Font = new Font("Segoe UI", 10f);
+        txtHora.TextAlign = HorizontalAlignment.Center;
+        txtHora.Width = S(46);
+        txtHora.Location = new Point((pildoraHora.Width - txtHora.Width) / 2, (pildoraHora.Height - txtHora.Height) / 2);
+        pildoraHora.Controls.Add(txtHora);
+
+        chipImportante.Font = new Font("Segoe UI", 9.5f);
+        chipImportante.Text = "Importante";
+        chipImportante.ConCasilla = true;
+        chipImportante.ColorActivo = Ui.Naranja;
+        int xImp = pildoraHora.Right + separacion;
+        chipImportante.Bounds = new Rectangle(xImp, y, ancho - margen - xImp, altoChip);
+
+        ClientSize = new Size(ancho, chipFecha.Bottom + margen);
+
+        // --- Calendario (aparece encima de la lista al pulsar la fecha) ---
+        calendario.Bounds = tarjeta.Bounds;
+        calendario.Radius = S(16);
+        calendario.Font = new Font("Segoe UI", 10f);
+        calendario.Visible = false;
 
         Controls.AddRange(new Control[]
         {
-            lblTitulo, lblSub, btnPrev, btnNext, tarjeta, entrada, btnAnadir
+            lblTitulo, lblSub, btnPrev, btnNext, tarjeta, entrada, btnAnadir,
+            chipFecha, pildoraHora, chipImportante, calendario
         });
         AcceptButton = btnAnadir; // Enter = añadir
 
@@ -367,6 +686,7 @@ public class MainForm : Form
 
         // --- Datos ---
         Cargar();
+        ActualizarChipFecha();
         Refrescar();
         tray.Visible = true;
 
@@ -379,10 +699,20 @@ public class MainForm : Form
             tray.ShowBalloonTip(4000, "Tareas de hoy", $"Tienes {pendientes} tarea(s) pendiente(s)", ToolTipIcon.Info);
 
         // --- Eventos ---
-        btnPrev.Click += (s, e) => CambiarDia(-1);
-        btnNext.Click += (s, e) => CambiarDia(1);
-        lblTitulo.Click += (s, e) => { dia = DateTime.Today; Refrescar(); };
+        btnPrev.Click += (s, e) => IrADia(dia.AddDays(-1));
+        btnNext.Click += (s, e) => IrADia(dia.AddDays(1));
+        lblTitulo.Click += (s, e) => IrADia(DateTime.Today);
         btnAnadir.Click += (s, e) => Anadir();
+        chipFecha.Click += (s, e) => AlternarCalendario();
+        calendario.DiaElegido += (s, d) =>
+        {
+            fechaNueva = d.Date;
+            ActualizarChipFecha();
+            calendario.Visible = false;
+            txtNueva.Focus();
+        };
+        txtHora.TextChanged += (s, e) => txtHora.ForeColor = Color.White;
+
         lista.DrawItem += DibujarItem;
         lista.MouseMove += (s, e) =>
         {
@@ -391,7 +721,13 @@ public class MainForm : Form
         };
         lista.MouseLeave += (s, e) => { hover = -1; lista.Invalidate(); };
         lista.MouseDown += Lista_MouseDown;
-        KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) Hide(); };
+
+        KeyDown += (s, e) =>
+        {
+            if (e.KeyCode != Keys.Escape) return;
+            if (calendario.Visible) calendario.Visible = false;
+            else Hide();
+        };
 
         // Cada minuto comprueba si ha cambiado el día (medianoche)
         reloj.Interval = 60_000;
@@ -399,8 +735,7 @@ public class MainForm : Form
         {
             if (DateTime.Today == ultimoDia) return;
             ultimoDia = DateTime.Today;
-            dia = DateTime.Today;
-            Refrescar();
+            IrADia(DateTime.Today);
         };
         reloj.Start();
     }
@@ -470,8 +805,8 @@ public class MainForm : Form
 
     void Mostrar()
     {
-        dia = DateTime.Today;
-        Refrescar();
+        calendario.Visible = false;
+        IrADia(DateTime.Today);
         var area = Screen.PrimaryScreen!.WorkingArea;
         Location = new Point(area.Right - Width - S(12), area.Bottom - Height - S(12));
         Show();
@@ -481,7 +816,53 @@ public class MainForm : Form
         txtNueva.Focus();
     }
 
+    // ---------- Textos de fechas ----------
+    static string FechaTxt(DateTime f)
+    {
+        var hoy = DateTime.Today;
+        if (f.Date == hoy) return "hoy";
+        if (f.Date == hoy.AddDays(1)) return "mañana";
+        if (f.Date == hoy.AddDays(-1)) return "ayer";
+        return f.ToString("d MMM yyyy", es).Replace(".", "");
+    }
+
+    void ActualizarChipFecha()
+    {
+        chipFecha.Text = fechaNueva.ToString("d MMM yyyy", es).Replace(".", "");
+    }
+
+    void AlternarCalendario()
+    {
+        if (calendario.Visible)
+        {
+            calendario.Visible = false;
+            return;
+        }
+        calendario.Seleccionado = fechaNueva;
+        calendario.Visible = true;
+        calendario.BringToFront();
+    }
+
     // ---------- Dibujo de cada fila de la lista ----------
+    bool EsDestacada(Tarea t) => Destacada(t, dia);
+
+    // Texto pequeño bajo el título (hora o entrega) y su color
+    (string? texto, Color color) Subtitulo(Tarea t, bool destacada)
+    {
+        string hora = t.ConHora ? " · " + t.Fecha.ToString("HH:mm") : "";
+
+        if (destacada)
+        {
+            bool vencida = t.ConHora ? t.Fecha < DateTime.Now : t.Fecha.Date < DateTime.Today;
+            return vencida
+                ? ($"Vencida · {FechaTxt(t.Fecha)}{hora}", Ui.Rojo)
+                : ($"Entrega {FechaTxt(t.Fecha)}{hora}", Ui.Naranja);
+        }
+        if (t.Importante) return ($"Entrega {FechaTxt(t.Fecha)}{hora}", Ui.Gris);
+        if (t.ConHora) return (t.Fecha.ToString("HH:mm"), Ui.Gris);
+        return (null, Ui.Gris);
+    }
+
     void DibujarItem(object? sender, DrawItemEventArgs e)
     {
         if (e.Index < 0 || e.Index >= visibles.Count) return;
@@ -490,6 +871,7 @@ public class MainForm : Form
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var t = visibles[e.Index];
         var r = e.Bounds;
+        bool destacada = EsDestacada(t);
 
         // Fondo (con un tono más claro al pasar el ratón)
         using (var fondo = new SolidBrush(e.Index == hover ? Ui.Hover : Ui.Tarjeta))
@@ -502,7 +884,7 @@ public class MainForm : Form
             g.DrawLine(sep, r.Left + S(48), r.Bottom - 1, r.Right - S(12), r.Bottom - 1);
         }
 
-        // Círculo (vacío o azul con check)
+        // Círculo (vacío, naranja si es importante, o azul con check si está hecha)
         int circ = S(22);
         var c = new Rectangle(r.Left + S(14), r.Top + (r.Height - circ) / 2, circ, circ);
         if (t.Hecha)
@@ -524,15 +906,28 @@ public class MainForm : Form
         }
         else
         {
-            using var pen = new Pen(Color.FromArgb(99, 99, 102), Sf(1.8f));
+            var colorAro = destacada ? Ui.Naranja : Color.FromArgb(99, 99, 102);
+            using var pen = new Pen(colorAro, Sf(destacada ? 2.2f : 1.8f));
             g.DrawEllipse(pen, c.X + 1, c.Y + 1, c.Width - 2, c.Height - 2);
         }
 
-        // Texto (tachado y gris si está hecha)
-        var rectTexto = new Rectangle(r.Left + S(48), r.Top, r.Width - S(48) - S(40), r.Height);
-        TextRenderer.DrawText(g, t.Titulo, t.Hecha ? fHecha : fNormal, rectTexto,
-            t.Hecha ? Ui.Gris : Color.White,
-            TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        // Título y, si hay, el texto pequeño de debajo
+        int xTexto = r.Left + S(48);
+        int anchoTexto = r.Width - S(48) - S(40);
+        var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+        var colorTitulo = t.Hecha ? Ui.Gris : Color.White;
+        var fuenteTitulo = t.Hecha ? fHecha : fNormal;
+
+        var (sub, colorSub) = Subtitulo(t, destacada);
+        if (sub == null)
+        {
+            TextRenderer.DrawText(g, t.Titulo, fuenteTitulo, new Rectangle(xTexto, r.Top, anchoTexto, r.Height), colorTitulo, flags);
+        }
+        else
+        {
+            TextRenderer.DrawText(g, t.Titulo, fuenteTitulo, new Rectangle(xTexto, r.Top + S(6), anchoTexto, S(24)), colorTitulo, flags);
+            TextRenderer.DrawText(g, sub, fSub, new Rectangle(xTexto, r.Top + S(28), anchoTexto, S(18)), t.Hecha ? Ui.Gris : colorSub, flags);
+        }
 
         // Aspa para borrar al pasar el ratón
         if (e.Index == hover)
@@ -554,26 +949,46 @@ public class MainForm : Form
         {
             // Clic en el aspa: eliminar
             tareas.Remove(visibles[i]);
-            Guardar();
-            Refrescar();
         }
         else
         {
             // Clic en cualquier otro sitio de la fila: marcar / desmarcar
             visibles[i].Hecha = !visibles[i].Hecha;
-            Guardar();
-            lista.Invalidate();
-            ActualizarCabecera();
-            ActualizarIcono();
         }
+        Guardar();
+        Refrescar();
     }
 
     // ---------- Lógica de tareas ----------
-    int PendientesHoy() => tareas.Count(t => t.Fecha.Date == DateTime.Today && !t.Hecha);
 
-    void CambiarDia(int delta)
+    // Una tarea importante y pendiente sale TODOS los días (desde que se creó) hasta que se haga
+    static bool Destacada(Tarea t, DateTime d) =>
+        t.Importante && !t.Hecha && d.Date >= t.Creada.Date;
+
+    // Lista de un día: primero las importantes (por fecha de entrega) y después las del día
+    List<Tarea> TareasDelDia(DateTime d)
     {
-        dia = dia.AddDays(delta);
+        d = d.Date;
+
+        var arriba = tareas
+            .Where(t => Destacada(t, d))
+            .OrderBy(t => t.Fecha);
+
+        var resto = tareas
+            .Where(t => !Destacada(t, d) && t.Fecha.Date == d)
+            .OrderBy(t => t.Hecha)
+            .ThenBy(t => t.ConHora ? t.Fecha.TimeOfDay : TimeSpan.FromDays(1));
+
+        return arriba.Concat(resto).ToList();
+    }
+
+    int PendientesHoy() => TareasDelDia(DateTime.Today).Count(t => !t.Hecha);
+
+    void IrADia(DateTime d)
+    {
+        dia = d.Date;
+        fechaNueva = dia;
+        ActualizarChipFecha();
         Refrescar();
     }
 
@@ -582,20 +997,53 @@ public class MainForm : Form
         string titulo = txtNueva.Text.Trim();
         if (titulo == "") return;
 
-        tareas.Add(new Tarea { Titulo = titulo, Fecha = dia.Date });
+        // Fecha elegida + hora (si se ha escrito)
+        var fecha = fechaNueva.Date;
+        bool conHora = false;
+
+        if (txtHora.Text.Any(char.IsDigit))
+        {
+            if (txtHora.MaskCompleted &&
+                TimeOnly.TryParseExact(txtHora.Text, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var hora))
+            {
+                fecha = fecha.Add(hora.ToTimeSpan());
+                conHora = true;
+            }
+            else
+            {
+                txtHora.ForeColor = Ui.Rojo; // hora incompleta o inválida
+                txtHora.Focus();
+                return;
+            }
+        }
+
+        var nueva = new Tarea
+        {
+            Titulo = titulo,
+            Fecha = fecha,
+            ConHora = conHora,
+            Importante = chipImportante.Checked,
+            Creada = DateTime.Today
+        };
+        tareas.Add(nueva);
+
         txtNueva.Clear();
+        txtHora.Clear();
+        chipImportante.Checked = false;
         Guardar();
-        Refrescar();
+
+        // Si la tarea no se ve en el día actual, saltamos al día de la tarea para que se vea dónde ha caído
+        if (!TareasDelDia(dia).Contains(nueva))
+            IrADia(fecha.Date);
+        else
+            Refrescar();
     }
 
     void Refrescar()
     {
         hover = -1;
         lista.Items.Clear();
-        visibles = tareas
-            .Where(t => t.Fecha.Date == dia.Date)
-            .OrderBy(t => t.Hecha)
-            .ToList();
+        visibles = TareasDelDia(dia);
         foreach (var t in visibles)
             lista.Items.Add(t.Titulo);
 
@@ -613,7 +1061,7 @@ public class MainForm : Form
             dia.Date == hoy ? "Hoy" :
             dia.Date == hoy.AddDays(1) ? "Mañana" :
             dia.Date == hoy.AddDays(-1) ? "Ayer" :
-            dia.ToString("d MMM", es);
+            dia.ToString("d MMM", es).Replace(".", "");
 
         string fechaTxt = dia.ToString("dddd d 'de' MMMM", es);
         fechaTxt = char.ToUpper(fechaTxt[0]) + fechaTxt[1..];
@@ -708,6 +1156,7 @@ public class MainForm : Form
             reloj.Dispose();
             fNormal.Dispose();
             fHecha.Dispose();
+            fSub.Dispose();
         }
         base.Dispose(disposing);
     }

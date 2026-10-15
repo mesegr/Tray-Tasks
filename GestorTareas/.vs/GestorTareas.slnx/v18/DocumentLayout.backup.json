@@ -1,9 +1,9 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "D:\\Proyectos\\GestorTareas\\",
+  "WorkspaceRootPath": "D:\\Proyectos\\Tray-Tasks\\GestorTareas\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{523B2374-83F4-4721-D268-ABA486D7F251}|GestorTareas\\GestorTareas.csproj|d:\\proyectos\\gestortareas\\gestortareas\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "AbsoluteMoniker": "D:0:0:{523B2374-83F4-4721-D268-ABA486D7F251}|GestorTareas\\GestorTareas.csproj|d:\\proyectos\\tray-tasks\\gestortareas\\gestortareas\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{523B2374-83F4-4721-D268-ABA486D7F251}|GestorTareas\\GestorTareas.csproj|solutionrelative:gestortareas\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
@@ -20,11 +20,11 @@
               "$type": "Document",
               "DocumentIndex": 0,
               "Title": "Program.cs",
-              "DocumentMoniker": "D:\\Proyectos\\GestorTareas\\GestorTareas\\Program.cs",
+              "DocumentMoniker": "D:\\Proyectos\\Tray-Tasks\\GestorTareas\\GestorTareas\\Program.cs",
               "RelativeDocumentMoniker": "GestorTareas\\Program.cs",
-              "ToolTip": "D:\\Proyectos\\GestorTareas\\GestorTareas\\Program.cs",
+              "ToolTip": "D:\\Proyectos\\Tray-Tasks\\GestorTareas\\GestorTareas\\Program.cs",
               "RelativeToolTip": "GestorTareas\\Program.cs",
-              "ViewState": "AgIAAJUCAAAAAAAAAAAQwKUCAAAJAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACEAAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-10-14T11:42:03.48Z",
               "EditorCaption": ""

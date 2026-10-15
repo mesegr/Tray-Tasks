@@ -517,6 +517,17 @@ class ColoresOscuros : ProfessionalColorTable
 // =====================================================================
 public class MainForm : Form
 {
+    const int IdAtajoVentana = 7001;
+    const int WM_HOTKEY = 0x0312;
+    const uint MOD_CONTROL = 0x0002;
+    const uint MOD_ALT = 0x0001;
+
+    [DllImport("user32.dll")]
+    static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll")]
+    static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
     const string ClaveInicio = @"Software\Microsoft\Windows\CurrentVersion\Run";
     const string NombreApp = "TareasBandeja";
     static readonly CultureInfo es = new("es-ES");
@@ -852,6 +863,7 @@ public class MainForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        RegisterHotKey(Handle, IdAtajoVentana, MOD_CONTROL | MOD_ALT, (uint)Keys.T);
         if (Environment.OSVersion.Version.Build >= 22000)
         {
             int redondeo = 2; // DWMWCP_ROUND
@@ -862,6 +874,25 @@ public class MainForm : Form
             using var path = Ui.RoundedRect(new Rectangle(0, 0, Width, Height), S(14));
             Region = new Region(path);
         }
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        if (IsHandleCreated)
+            UnregisterHotKey(Handle, IdAtajoVentana);
+        base.OnHandleDestroyed(e);
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == IdAtajoVentana)
+        {
+            if (Visible) Hide();
+            else Mostrar();
+            return;
+        }
+
+        base.WndProc(ref m);
     }
 
     // Al cerrar no se cierra la app: se oculta

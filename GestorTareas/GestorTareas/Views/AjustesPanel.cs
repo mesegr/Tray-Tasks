@@ -73,11 +73,11 @@ internal sealed class AjustesPanel : RoundedPanel
         capturaAtajo.Leave += (_, _) => capturaAtajo.BackColor = Ui.Hover;
 
         ConfigurarEtiqueta(etiquetaAviso, "Aviso previo", new Point(18, 172));
-        ConfigurarEtiqueta(etiquetaDuracion, "Duración", new Point(164, 172));
-        ConfigurarEtiqueta(etiquetaUbicacion, "Posición de las notificaciones", new Point(18, 246));
-        ConfigurarSelector(avisoPrevio, new Point(18, 196), 128, "30 min", "60 min");
-        ConfigurarSelector(duracionAviso, new Point(164, 196), 136, "2 segundos", "4 segundos", "6 segundos");
-        ConfigurarSelector(ubicacionAviso, new Point(18, 270), 260, "Abajo a la derecha", "Abajo a la izquierda", "Arriba a la derecha", "Arriba a la izquierda");
+        ConfigurarEtiqueta(etiquetaDuracion, "Duración", new Point(162, 172));
+        ConfigurarEtiqueta(etiquetaUbicacion, "Posición de las notificaciones", new Point(18, 242));
+        ConfigurarSelector(avisoPrevio, new Point(18, 192), 129, "30 min", "60 min");
+        ConfigurarSelector(duracionAviso, new Point(161, 192), 129, "2 segundos", "4 segundos", "6 segundos");
+        ConfigurarSelector(ubicacionAviso, new Point(18, 262), 272, "Abajo a la derecha", "Abajo a la izquierda", "Arriba a la derecha", "Arriba a la izquierda");
         sonido.Text = "Reproducir sonido";
         inicioAutomatico.Text = "Iniciar con Windows";
         temaClaro.Text = "Usar tema claro";
@@ -87,12 +87,12 @@ internal sealed class AjustesPanel : RoundedPanel
             opcion.AutoSize = true;
             opcion.ForeColor = Color.White;
             opcion.BackColor = Ui.Tarjeta;
-            opcion.Font = new Font("Segoe UI", 9.5f);
+            opcion.Font = new Font("Segoe UI", 11f);
             opcion.Left = 18;
         }
-        sonido.Top = 320;
-        inicioAutomatico.Top = 344;
-        temaClaro.Top = 368;
+        sonido.Top = 314;
+        inicioAutomatico.Top = 340;
+        temaClaro.Top = 366;
         mostrarAlIniciar.Top = 392;
 
         guardar = CrearBoton("Guardar", Ui.Azul, 0, 0, 86);
@@ -103,7 +103,7 @@ internal sealed class AjustesPanel : RoundedPanel
         contenido.Location = Point.Empty;
         contenido.BackColor = Ui.Tarjeta;
         contenido.AutoScroll = true;
-        contenido.AutoScrollMinSize = new Size(0, 436);
+        contenido.AutoScrollMinSize = new Size(0, 500);
         contenido.BorderStyle = BorderStyle.None;
         contenido.Controls.AddRange(new Control[] { encabezado, descripcion, etiquetaAtajo, capturaAtajo,
             etiquetaAviso, etiquetaDuracion, etiquetaUbicacion, avisoPrevio, duracionAviso, ubicacionAviso,
@@ -123,6 +123,13 @@ internal sealed class AjustesPanel : RoundedPanel
         const int separacion = 8;
         contenido.Bounds = new Rectangle(0, 0, Width, Math.Max(100, Height - 58));
         capturaAtajo.Width = Math.Max(120, Width - 36);
+        int anchoInterior = Math.Max(140, Width - 36);
+        int anchoColumna = Math.Max(80, (anchoInterior - 14) / 2);
+        avisoPrevio.Width = anchoColumna;
+        duracionAviso.Left = 18 + anchoColumna + 14;
+        duracionAviso.Width = anchoColumna;
+        etiquetaDuracion.Left = duracionAviso.Left;
+        ubicacionAviso.Width = anchoInterior;
         cancelar.Location = new Point(Math.Max(margen, Width - margen - cancelar.Width),
             Math.Max(margen, Height - margen - cancelar.Height));
         guardar.Location = new Point(Math.Max(margen, cancelar.Left - separacion - guardar.Width), cancelar.Top);
@@ -197,7 +204,7 @@ internal sealed class AjustesPanel : RoundedPanel
         selector.Size = new Size(ancho, 36);
         selector.BackColor = Ui.Hover;
         selector.ForeColor = Color.White;
-        selector.Font = new Font("Segoe UI", 9f);
+        selector.Font = new Font("Segoe UI", 11f);
         selector.Items.AddRange(opciones);
         selector.SelectedIndex = 0;
     }

@@ -89,10 +89,10 @@ internal sealed class TareaEditPanel : RoundedPanel
         etiquetaRecurrencia.Font = new Font("Segoe UI", 8.5f);
         etiquetaRecurrencia.Location = new Point(18, 188);
 
-        recurrencia.Bounds = new Rectangle(18, 208, 220, 30);
+        recurrencia.Bounds = new Rectangle(18, 208, 254, 36);
         recurrencia.BackColor = Ui.Hover;
         recurrencia.ForeColor = Color.White;
-        recurrencia.Font = new Font("Segoe UI", 9.5f);
+        recurrencia.Font = new Font("Segoe UI", 11f);
         recurrencia.Items.AddRange(new object[] { "No se repite", "Cada día", "Cada semana", "Cada mes" });
         recurrencia.SelectedIndex = 0;
 
@@ -109,6 +109,7 @@ internal sealed class TareaEditPanel : RoundedPanel
         base.OnResize(eventargs);
         titulo.Width = Math.Max(100, Width - 36);
         titulo.Region = new Region(Ui.RoundedRect(new Rectangle(0, 0, titulo.Width, titulo.Height), Ui.RadioEsquina));
+        recurrencia.Width = Math.Max(140, Width - 36);
         cancelar.Left = Math.Max(18, Width - cancelar.Width - 18);
         guardar.Left = Math.Max(18, cancelar.Left - guardar.Width - 8);
     }

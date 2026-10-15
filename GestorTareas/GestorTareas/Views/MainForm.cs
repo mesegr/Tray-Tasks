@@ -198,6 +198,44 @@ class CloseButton : Button
     }
 }
 
+class SettingsButton : Button
+{
+    bool hover, down;
+
+    public SettingsButton()
+    {
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 0;
+        BackColor = Ui.Fondo;
+        ForeColor = Ui.Gris;
+        Cursor = Cursors.Hand;
+        TabStop = false;
+        SetStyle(ControlStyles.Selectable, false);
+        DoubleBuffered = true;
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = false; down = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnMouseDown(MouseEventArgs e) { down = true; Invalidate(); base.OnMouseDown(e); }
+    protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(Parent?.BackColor ?? Ui.Fondo);
+        if (hover || down)
+        {
+            using var fondo = new SolidBrush(down ? Ui.Hover : Ui.Tarjeta);
+            g.FillEllipse(fondo, 0, 0, Width - 1, Height - 1);
+        }
+
+        using var fuente = new Font("Segoe UI Symbol", 17f);
+        TextRenderer.DrawText(g, "⚙", fuente, ClientRectangle, down ? Color.White : Ui.Gris,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+    }
+}
+
 // "Chip" redondo: sirve de botón (fecha) o de casilla (importante)
 class Chip : Control
 {
@@ -558,7 +596,7 @@ public class MainForm : Form
     readonly Label lblVacio = new();
     readonly ChevronButton btnPrev = new();
     readonly ChevronButton btnNext = new();
-    readonly Button btnAjustes = new();
+    readonly SettingsButton btnAjustes = new();
     readonly CloseButton btnCerrar = new();
     readonly RoundedPanel tarjeta = new();
     readonly RoundedPanel entrada = new();
@@ -826,6 +864,12 @@ public class MainForm : Form
         btnNext.Click += (s, e) => IrADia(dia.AddDays(1));
         btnAjustes.Click += (s, e) =>
         {
+            if (panelAjustes.Visible)
+            {
+                panelAjustes.Visible = false;
+                return;
+            }
+
             calendario.Visible = false;
             panelEdicion.Visible = false;
             panelAjustes.Editar(configuracionAtajo);

@@ -166,6 +166,15 @@ class Chip : Control
     public Color ColorActivo { get; set; } = Ui.Azul;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color ColorInactivo { get; set; } = Ui.Tarjeta;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool SoloCirculoMarcado { get; set; }
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool SinResaltadoHover { get; set; }
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool Checked
     {
         get => marcado;
@@ -184,6 +193,16 @@ class Chip : Control
     protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
     protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
 
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        if (!ConCasilla)
+            return base.GetPreferredSize(proposedSize);
+
+        int alto = Height > 0 ? Height : 32;
+        int anchoTexto = TextRenderer.MeasureText(Text ?? string.Empty, Font).Width;
+        return new Size(anchoTexto + alto + (int)(alto * 0.55f), alto);
+    }
+
     protected override void OnClick(EventArgs e)
     {
         if (ConCasilla) Checked = !Checked;
@@ -194,13 +213,18 @@ class Chip : Control
     {
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.Clear(Ui.Fondo);
+        g.Clear(Parent?.BackColor ?? Ui.Fondo);
 
         using (var path = Ui.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), Height / 2))
-        using (var fondo = new SolidBrush(marcado ? ColorActivo : hover ? Ui.Hover : Ui.Tarjeta))
+        {
+            var colorFondo = marcado && !SoloCirculoMarcado
+                ? ColorActivo
+                : hover && !SinResaltadoHover ? Ui.Hover : ColorInactivo;
+            using var fondo = new SolidBrush(colorFondo);
             g.FillPath(fondo, path);
+        }
 
-        var colTexto = marcado ? Color.White : ConCasilla ? Ui.Gris : Color.White;
+        var colTexto = marcado && !SoloCirculoMarcado ? Color.White : ConCasilla ? Ui.Gris : Color.White;
         var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis;
 
         if (ConCasilla)
@@ -209,8 +233,9 @@ class Chip : Control
             var c = new RectangleF(Height * 0.3f, (Height - d) / 2f, d, d);
             if (marcado)
             {
-                g.FillEllipse(Brushes.White, c);
-                using var pen = new Pen(ColorActivo, d / 8f)
+                using var fondoCirculo = new SolidBrush(SoloCirculoMarcado ? ColorActivo : Color.White);
+                g.FillEllipse(fondoCirculo, c);
+                using var pen = new Pen(SoloCirculoMarcado ? Color.White : ColorActivo, d / 8f)
                 {
                     StartCap = LineCap.Round,
                     EndCap = LineCap.Round,
@@ -465,6 +490,7 @@ public class MainForm : Form
     static extern int SetWindowTheme(IntPtr hWnd, string appName, string? idList);
 
     readonly TareaController controller = new();
+    readonly Stack<Tarea> borradas = new();
     List<Tarea> visibles = new();     // lo que se muestra en la lista del día actual
     DateTime dia = DateTime.Today;    // día que se está viendo
     DateTime fechaNueva = DateTime.Today; // fecha elegida para la tarea que se va a crear
@@ -485,6 +511,8 @@ public class MainForm : Form
     readonly Chip chipFecha = new();
     readonly Chip chipImportante = new();
     readonly MiniCalendar calendario = new();
+    readonly TareaEditPanel panelEdicion = new();
+    readonly UndoSnackbar snackbar = new();
     readonly System.Windows.Forms.Timer reloj = new();
 
     readonly Font fNormal = new("Segoe UI", 11f);
@@ -500,6 +528,8 @@ public class MainForm : Form
     bool salir;
     bool primeraVez = true;
     readonly HashSet<(Tarea Tarea, int MinutosAntes)> recordatoriosMostrados = new();
+    ToolStripMenuItem? itemDeshacerBorrado;
+    Tarea? tareaEnEdicion;
 
     public MainForm()
     {
@@ -626,10 +656,29 @@ public class MainForm : Form
         calendario.Font = new Font("Segoe UI", 10f);
         calendario.Visible = false;
 
+        panelEdicion.Bounds = new Rectangle(tarjeta.Left, tarjeta.Top, tarjeta.Width, S(264));
+        panelEdicion.Visible = false;
+        panelEdicion.Guardado += (_, tareaEditada) =>
+        {
+            if (tareaEnEdicion == null) return;
+            controller.Actualizar(tareaEnEdicion, tareaEditada);
+            tareaEnEdicion = null;
+            panelEdicion.Visible = false;
+            Refrescar();
+        };
+        panelEdicion.Cancelado += (_, _) =>
+        {
+            tareaEnEdicion = null;
+            panelEdicion.Visible = false;
+        };
+
+        snackbar.Bounds = new Rectangle(S(12), ClientSize.Height - S(52), ClientSize.Width - S(24), S(42));
+        snackbar.DeshacerSolicitado += (_, _) => DeshacerBorrado();
+
         Controls.AddRange(new Control[]
         {
             lblTitulo, lblSub, btnPrev, btnNext, tarjeta, entrada, btnAnadir,
-            chipFecha, pildoraHora, chipImportante, calendario
+            chipFecha, pildoraHora, chipImportante, calendario, panelEdicion, snackbar
         });
         AcceptButton = btnAnadir; // Enter = añadir
 
@@ -643,6 +692,11 @@ public class MainForm : Form
             Font = new Font("Segoe UI", 10f)
         };
         menu.Items.Add("Abrir", null, (s, e) => BeginInvoke(new Action(Mostrar)));
+        itemDeshacerBorrado = new ToolStripMenuItem("Deshacer borrado");
+        menu.Items.Add(itemDeshacerBorrado);
+        itemDeshacerBorrado.Enabled = false;
+        itemDeshacerBorrado.Click += (s, e) => DeshacerBorrado();
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Salir", null, (s, e) => { salir = true; tray.Visible = false; Application.Exit(); });
         tray.ContextMenuStrip = menu;
         // Clic en el icono: abre el panel; otro clic en el icono: lo cierra
@@ -696,6 +750,7 @@ public class MainForm : Form
         };
         lista.MouseLeave += (s, e) => { hover = -1; lista.Invalidate(); };
         lista.MouseDown += Lista_MouseDown;
+        lista.DoubleClick += Lista_DoubleClick;
 
         KeyDown += (s, e) =>
         {
@@ -895,7 +950,35 @@ public class MainForm : Form
         // Solo el aspa elimina la tarea; hacer clic en el resto de la fila no hace nada
         if (e.X <= lista.ClientSize.Width - S(44)) return;
 
-        controller.Eliminar(visibles[i]);
+        var eliminada = visibles[i];
+        controller.Eliminar(eliminada);
+        borradas.Push(eliminada);
+        if (itemDeshacerBorrado != null) itemDeshacerBorrado.Enabled = true;
+        Refrescar();
+        snackbar.Mostrar(eliminada.Titulo);
+    }
+
+    void Lista_DoubleClick(object? sender, EventArgs e)
+    {
+        int i = lista.IndexFromPoint(lista.PointToClient(Cursor.Position));
+        if (i < 0 || i >= visibles.Count) return;
+
+        var punto = lista.PointToClient(Cursor.Position);
+        if (punto.X > lista.ClientSize.Width - S(44)) return;
+
+        tareaEnEdicion = visibles[i];
+        panelEdicion.Editar(tareaEnEdicion);
+        panelEdicion.Visible = true;
+        panelEdicion.BringToFront();
+    }
+
+    void DeshacerBorrado()
+    {
+        if (borradas.Count == 0) return;
+
+        controller.Anadir(borradas.Pop());
+        if (itemDeshacerBorrado != null)
+            itemDeshacerBorrado.Enabled = borradas.Count > 0;
         Refrescar();
     }
 

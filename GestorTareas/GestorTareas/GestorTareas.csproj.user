@@ -4,5 +4,14 @@
     <Compile Update="Views\NotificationPopup.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="Views\TareaEditDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Views\TareaEditPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="Views\UndoSnackbar.cs">
+      <SubType>Component</SubType>
+    </Compile>
   </ItemGroup>
 </Project>

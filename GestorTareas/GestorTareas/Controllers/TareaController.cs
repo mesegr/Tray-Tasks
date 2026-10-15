@@ -45,6 +45,15 @@ public sealed class TareaController
         if (tareas.Remove(tarea)) Guardar();
     }
 
+    public void Actualizar(Tarea original, Tarea actualizada)
+    {
+        int indice = tareas.IndexOf(original);
+        if (indice < 0) return;
+
+        tareas[indice] = actualizada;
+        Guardar();
+    }
+
     public int PendientesHoy() => ObtenerParaDia(DateTime.Today).Count;
 
     public List<Tarea> ObtenerParaDia(DateTime dia)

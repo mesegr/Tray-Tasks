@@ -141,7 +141,7 @@ internal sealed class TareaEditPanel : RoundedPanel
     }
 }
 
-file sealed class EditorButton : Button
+internal sealed class EditorButton : Button
 {
     public EditorButton()
     {

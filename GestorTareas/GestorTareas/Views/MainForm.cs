@@ -521,6 +521,8 @@ public class MainForm : Form
     const int WM_HOTKEY = 0x0312;
     const uint MOD_CONTROL = 0x0002;
     const uint MOD_ALT = 0x0001;
+    const uint MOD_SHIFT = 0x0004;
+    const uint MOD_WIN = 0x0008;
 
     [DllImport("user32.dll")]
     static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -556,6 +558,7 @@ public class MainForm : Form
     readonly Label lblVacio = new();
     readonly ChevronButton btnPrev = new();
     readonly ChevronButton btnNext = new();
+    readonly Button btnAjustes = new();
     readonly CloseButton btnCerrar = new();
     readonly RoundedPanel tarjeta = new();
     readonly RoundedPanel entrada = new();
@@ -568,6 +571,7 @@ public class MainForm : Form
     readonly Chip chipImportante = new();
     readonly MiniCalendar calendario = new();
     readonly TareaEditPanel panelEdicion = new();
+    readonly AjustesPanel panelAjustes = new();
     readonly UndoSnackbar snackbar = new();
     readonly System.Windows.Forms.Timer reloj = new();
 
@@ -586,10 +590,12 @@ public class MainForm : Form
     readonly HashSet<(Tarea Tarea, int MinutosAntes)> recordatoriosMostrados = new();
     ToolStripMenuItem? itemDeshacerBorrado;
     Tarea? tareaEnEdicion;
+    ConfiguracionAtajo configuracionAtajo;
 
     public MainForm()
     {
         k = DeviceDpi / 96f;
+        configuracionAtajo = CargarConfiguracionAtajo();
 
         // --- Ventana: sin bordes, oscura, tipo "popover" ---
         AutoScaleMode = AutoScaleMode.None; // la escala la hacemos nosotros con S()
@@ -622,8 +628,17 @@ public class MainForm : Form
         lblSub.Bounds = new Rectangle(S(22), lblTitulo.Bottom - S(2), S(300), lblSub.PreferredHeight);
 
         btnNext.Derecha = true;
+        btnAjustes.Text = "⚙";
+        btnAjustes.Font = new Font("Segoe UI Symbol", 13f);
+        btnAjustes.ForeColor = Ui.Gris;
+        btnAjustes.BackColor = Ui.Fondo;
+        btnAjustes.FlatStyle = FlatStyle.Flat;
+        btnAjustes.FlatAppearance.BorderSize = 0;
+        btnAjustes.Cursor = Cursors.Hand;
+        btnAjustes.TabStop = false;
+        btnAjustes.Bounds = new Rectangle(ancho - margen - S(68), S(14), S(32), S(32));
         btnCerrar.Bounds = new Rectangle(ancho - margen - S(32), S(14), S(32), S(32));
-        btnNext.Bounds = new Rectangle(btnCerrar.Left - S(36), S(14), S(32), S(32));
+        btnNext.Bounds = new Rectangle(btnAjustes.Left - S(36), S(14), S(32), S(32));
         btnPrev.Bounds = new Rectangle(btnNext.Left - S(48), S(14), S(32), S(32));
 
         int y = lblSub.Bottom + S(10);
@@ -729,16 +744,35 @@ public class MainForm : Form
             panelEdicion.Visible = false;
         };
 
+        panelAjustes.Bounds = new Rectangle(tarjeta.Left, tarjeta.Top, tarjeta.Width, S(264));
+        panelAjustes.Visible = false;
+        panelAjustes.Editar(configuracionAtajo);
+        panelAjustes.Guardado += (_, nuevoAtajo) =>
+        {
+            if (!AplicarAtajo(nuevoAtajo))
+            {
+                MessageBox.Show(this, "Esa combinación ya está siendo utilizada por otra aplicación.",
+                    "Atajo no disponible", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            configuracionAtajo = nuevoAtajo;
+            GuardarConfiguracionAtajo(nuevoAtajo);
+            panelAjustes.Visible = false;
+        };
+        panelAjustes.Cancelado += (_, _) => panelAjustes.Visible = false;
+
         snackbar.Bounds = new Rectangle(S(12), ClientSize.Height - S(52), ClientSize.Width - S(24), S(42));
         snackbar.DeshacerSolicitado += (_, _) => DeshacerBorrado();
 
         Controls.AddRange(new Control[]
         {
-            lblTitulo, lblSub, btnPrev, btnNext, btnCerrar, tarjeta, entrada, btnAnadir,
-            chipFecha, pildoraHora, chipImportante, calendario, panelEdicion, snackbar
+            lblTitulo, lblSub, btnPrev, btnNext, btnAjustes, btnCerrar, tarjeta, entrada, btnAnadir,
+            chipFecha, pildoraHora, chipImportante, calendario, panelEdicion, panelAjustes, snackbar
         });
         btnPrev.BringToFront();
         btnNext.BringToFront();
+        btnAjustes.BringToFront();
         btnCerrar.BringToFront();
         AcceptButton = btnAnadir; // Enter = añadir
 
@@ -790,6 +824,14 @@ public class MainForm : Form
         // --- Eventos ---
         btnPrev.Click += (s, e) => IrADia(dia.AddDays(-1));
         btnNext.Click += (s, e) => IrADia(dia.AddDays(1));
+        btnAjustes.Click += (s, e) =>
+        {
+            calendario.Visible = false;
+            panelEdicion.Visible = false;
+            panelAjustes.Editar(configuracionAtajo);
+            panelAjustes.Visible = true;
+            panelAjustes.BringToFront();
+        };
         btnCerrar.Click += (s, e) => Hide();
         lblTitulo.Click += (s, e) => IrADia(DateTime.Today);
         btnAnadir.Click += (s, e) => Anadir();
@@ -863,7 +905,7 @@ public class MainForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        RegisterHotKey(Handle, IdAtajoVentana, MOD_CONTROL | MOD_ALT, (uint)Keys.T);
+        RegisterHotKey(Handle, IdAtajoVentana, configuracionAtajo.Modificadores, (uint)configuracionAtajo.Tecla);
         if (Environment.OSVersion.Version.Build >= 22000)
         {
             int redondeo = 2; // DWMWCP_ROUND
@@ -893,6 +935,16 @@ public class MainForm : Form
         }
 
         base.WndProc(ref m);
+    }
+
+    bool AplicarAtajo(ConfiguracionAtajo nuevo)
+    {
+        UnregisterHotKey(Handle, IdAtajoVentana);
+        if (RegisterHotKey(Handle, IdAtajoVentana, nuevo.Modificadores, (uint)nuevo.Tecla))
+            return true;
+
+        RegisterHotKey(Handle, IdAtajoVentana, configuracionAtajo.Modificadores, (uint)configuracionAtajo.Tecla);
+        return false;
     }
 
     // Al cerrar no se cierra la app: se oculta
@@ -1254,6 +1306,36 @@ public class MainForm : Form
         catch
         {
             // Si no se puede escribir en el registro, la app sigue funcionando igual
+        }
+    }
+
+    static ConfiguracionAtajo CargarConfiguracionAtajo()
+    {
+        try
+        {
+            using var clave = Registry.CurrentUser.OpenSubKey(@"Software\TareasBandeja");
+            uint modificadores = Convert.ToUInt32(clave?.GetValue("HotkeyModifiers") ?? (MOD_CONTROL | MOD_ALT));
+            var tecla = (Keys)Convert.ToInt32(clave?.GetValue("HotkeyKey") ?? (int)Keys.T);
+            if (tecla == Keys.None || modificadores == 0) throw new InvalidDataException();
+            return new ConfiguracionAtajo(modificadores, tecla);
+        }
+        catch
+        {
+            return new ConfiguracionAtajo(MOD_CONTROL | MOD_ALT, Keys.T);
+        }
+    }
+
+    static void GuardarConfiguracionAtajo(ConfiguracionAtajo config)
+    {
+        try
+        {
+            using var clave = Registry.CurrentUser.CreateSubKey(@"Software\TareasBandeja");
+            clave?.SetValue("HotkeyModifiers", config.Modificadores, RegistryValueKind.DWord);
+            clave?.SetValue("HotkeyKey", (int)config.Tecla, RegistryValueKind.DWord);
+        }
+        catch
+        {
+            // La app sigue funcionando aunque Windows no permita guardar el ajuste.
         }
     }
 

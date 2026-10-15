@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using System.Media;
 
 namespace TareasBandeja.Views;
 
@@ -7,9 +8,11 @@ namespace TareasBandeja.Views;
 /// </summary>
 internal sealed class NotificationPopup : Form
 {
+    private readonly System.Windows.Forms.Timer animacion = new();
     private readonly System.Windows.Forms.Timer cierre = new();
+    private bool saliendo;
 
-    public NotificationPopup(string titulo, string mensaje)
+    public NotificationPopup(string titulo, string mensaje, bool reproducirSonido)
     {
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
@@ -64,14 +67,52 @@ internal sealed class NotificationPopup : Form
         Controls.Add(lblTitulo);
         Controls.Add(lblMensaje);
 
-        cierre.Interval = 6000;
-        cierre.Tick += (_, _) => Close();
-        Shown += (_, _) =>
+        animacion.Interval = 15;
+        animacion.Tick += Mover;
+        cierre.Tick += (_, _) => CerrarAnimado();
+        Shown += (_, _) => { if (reproducirSonido) SystemSounds.Exclamation.Play(); };
+    }
+
+    public void PrepararEntrada()
+    {
+        Opacity = 0;
+    }
+
+    public void AnimarHasta(Point destino)
+    {
+        Location = destino;
+        if (saliendo || Opacity >= 1) return;
+
+        // La posición se fija directamente; solo se anima la opacidad.
+        saliendo = false;
+        animacion.Start();
+    }
+
+    public void ProgramarCierre(int milisegundos)
+    {
+        cierre.Interval = milisegundos;
+        cierre.Start();
+    }
+
+    public void CerrarAnimado()
+    {
+        if (saliendo || IsDisposed) return;
+        saliendo = true;
+        cierre.Stop();
+        animacion.Start();
+    }
+
+    private void Mover(object? sender, EventArgs e)
+    {
+        if (saliendo)
         {
-            var area = Screen.PrimaryScreen!.WorkingArea;
-            Location = new Point(area.Right - Width - 16, area.Bottom - Height - 16);
-            cierre.Start();
-        };
+            Opacity = Math.Max(0, Opacity - 0.16);
+            if (Opacity <= 0) { animacion.Stop(); Close(); }
+            return;
+        }
+
+        Opacity = Math.Min(1, Opacity + 0.16);
+        if (Opacity >= 1) animacion.Stop();
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -86,7 +127,7 @@ internal sealed class NotificationPopup : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) cierre.Dispose();
+        if (disposing) { animacion.Dispose(); cierre.Dispose(); }
         base.Dispose(disposing);
     }
 }
@@ -96,28 +137,145 @@ internal sealed class NotificationPopup : Form
 /// </summary>
 internal static class Notificador
 {
-    private static readonly Queue<(string Titulo, string Mensaje)> cola = new();
-    private static NotificationPopup? actual;
+    private const int MaximoVisibles = 3;
+    private const int Separacion = 8;
+    private const int DuracionAviso = 2000;
+
+    private static readonly Queue<(string Titulo, string Mensaje)> pendientes = new();
+    private static readonly Queue<(string Titulo, string Mensaje, bool Sonido)> colaSecuencial = new();
+    private static readonly Queue<(string Titulo, string Mensaje)> colaApilada = new();
+    private static readonly List<NotificationPopup> activas = new();
+    private static System.Windows.Forms.Timer? temporizadorLote;
+    private static System.Windows.Forms.Timer? temporizadorApilado;
+    private static NotificationPopup? secuencialActual;
 
     public static void Mostrar(string titulo, string mensaje)
     {
-        cola.Enqueue((titulo, mensaje));
-        MostrarSiguiente();
+        pendientes.Enqueue((titulo, mensaje));
+
+        // Espera unos milisegundos para agrupar avisos generados en el mismo ciclo
+        // y decidir si corresponde reproducir uno o varios sonidos.
+        if (temporizadorLote != null) return;
+
+        temporizadorLote = new System.Windows.Forms.Timer { Interval = 250 };
+        temporizadorLote.Tick += (_, _) =>
+        {
+            temporizadorLote.Stop();
+            temporizadorLote.Dispose();
+            temporizadorLote = null;
+            MostrarLote();
+        };
+        temporizadorLote.Start();
     }
 
-    private static void MostrarSiguiente()
+    private static void MostrarLote()
     {
-        if (actual != null || cola.Count == 0) return;
+        int cantidad = pendientes.Count;
 
-        var aviso = cola.Dequeue();
-        actual = new NotificationPopup(aviso.Titulo, aviso.Mensaje);
-        actual.FormClosed += (_, _) =>
+        if (cantidad <= 2)
         {
-            actual?.Dispose();
-            actual = null;
-            MostrarSiguiente();
+            while (pendientes.Count > 0)
+            {
+                var aviso = pendientes.Dequeue();
+                colaSecuencial.Enqueue((aviso.Titulo, aviso.Mensaje, true));
+            }
+
+            MostrarSiguienteSecuencial();
+            return;
+        }
+
+        while (pendientes.Count > 0)
+        {
+            colaApilada.Enqueue(pendientes.Dequeue());
+        }
+
+        if (temporizadorApilado == null)
+        {
+            for (int i = 0; i < MaximoVisibles && colaApilada.Count > 0; i++)
+                AgregarApilada(reproducirSonido: i == 0);
+
+            temporizadorApilado = new System.Windows.Forms.Timer { Interval = DuracionAviso };
+            temporizadorApilado.Tick += (_, _) => AvanzarApiladas();
+            temporizadorApilado.Start();
+        }
+
+        Reordenar();
+    }
+
+    private static void MostrarSiguienteSecuencial()
+    {
+        if (secuencialActual != null || colaSecuencial.Count == 0) return;
+
+        var aviso = colaSecuencial.Dequeue();
+        secuencialActual = new NotificationPopup(aviso.Titulo, aviso.Mensaje, aviso.Sonido);
+        secuencialActual.FormClosed += (_, _) =>
+        {
+            secuencialActual = null;
+            MostrarSiguienteSecuencial();
         };
-        actual.Show();
-        actual.BringToFront();
+        secuencialActual.PrepararEntrada();
+        secuencialActual.Show();
+        secuencialActual.BringToFront();
+        secuencialActual.AnimarHasta(PosicionInferior(secuencialActual));
+        secuencialActual.ProgramarCierre(DuracionAviso);
+    }
+
+    private static void AgregarApilada(bool reproducirSonido)
+    {
+        if (colaApilada.Count == 0) return;
+
+        var aviso = colaApilada.Dequeue();
+        var popup = new NotificationPopup(aviso.Titulo, aviso.Mensaje, reproducirSonido);
+        popup.PrepararEntrada();
+        activas.Add(popup);
+        popup.Show();
+        popup.BringToFront();
+    }
+
+    private static void AvanzarApiladas()
+    {
+        if (activas.Count > 0)
+        {
+            var antigua = activas[0];
+            activas.RemoveAt(0);
+            antigua.CerrarAnimado();
+        }
+
+        if (colaApilada.Count > 0)
+            AgregarApilada(reproducirSonido: false);
+
+        Reordenar();
+
+        if (activas.Count == 0 && colaApilada.Count == 0 && temporizadorApilado != null)
+        {
+            temporizadorApilado.Stop();
+            temporizadorApilado.Dispose();
+            temporizadorApilado = null;
+        }
+    }
+
+    private static void Reordenar()
+    {
+        int distancia = 0;
+
+        // La más reciente queda abajo; las anteriores se apilan hacia arriba.
+        for (int i = activas.Count - 1; i >= 0; i--)
+        {
+            var popup = activas[i];
+            if (popup.IsDisposed) continue;
+
+            var area = Screen.PrimaryScreen!.WorkingArea;
+            var destino = new Point(
+                area.Right - popup.Width - 16,
+                area.Bottom - popup.Height - 16 - distancia);
+            popup.AnimarHasta(destino);
+            distancia += popup.Height + Separacion;
+        }
+    }
+
+    private static Point PosicionInferior(NotificationPopup popup)
+    {
+        var area = Screen.PrimaryScreen!.WorkingArea;
+        return new Point(area.Right - popup.Width - 16, area.Bottom - popup.Height - 16);
     }
 }

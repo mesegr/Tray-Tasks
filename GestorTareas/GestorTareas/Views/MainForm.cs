@@ -154,6 +154,50 @@ class ChevronButton : Button
     }
 }
 
+// Botón de cierre discreto para la cabecera
+class CloseButton : Button
+{
+    bool hover, down;
+
+    public CloseButton()
+    {
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 0;
+        BackColor = Ui.Fondo;
+        Cursor = Cursors.Hand;
+        TabStop = false;
+        SetStyle(ControlStyles.Selectable, false);
+        DoubleBuffered = true;
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = false; down = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnMouseDown(MouseEventArgs e) { down = true; Invalidate(); base.OnMouseDown(e); }
+    protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(Parent?.BackColor ?? Ui.Fondo);
+
+        if (hover || down)
+        {
+            using var fondo = new SolidBrush(down ? Ui.Hover : Ui.Tarjeta);
+            g.FillEllipse(fondo, 0, 0, Width - 1, Height - 1);
+        }
+
+        float cx = Width / 2f, cy = Height / 2f, medio = Width * 0.16f;
+        using var pen = new Pen(Ui.Rojo, Width / 15f)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round
+        };
+        g.DrawLine(pen, cx - medio, cy - medio, cx + medio, cy + medio);
+        g.DrawLine(pen, cx - medio, cy + medio, cx + medio, cy - medio);
+    }
+}
+
 // "Chip" redondo: sirve de botón (fecha) o de casilla (importante)
 class Chip : Control
 {
@@ -501,6 +545,7 @@ public class MainForm : Form
     readonly Label lblVacio = new();
     readonly ChevronButton btnPrev = new();
     readonly ChevronButton btnNext = new();
+    readonly CloseButton btnCerrar = new();
     readonly RoundedPanel tarjeta = new();
     readonly RoundedPanel entrada = new();
     readonly RoundedPanel pildoraHora = new();
@@ -566,8 +611,9 @@ public class MainForm : Form
         lblSub.Bounds = new Rectangle(S(22), lblTitulo.Bottom - S(2), S(300), lblSub.PreferredHeight);
 
         btnNext.Derecha = true;
-        btnNext.Bounds = new Rectangle(ancho - margen - S(32), S(14), S(32), S(32));
-        btnPrev.Bounds = new Rectangle(btnNext.Left - S(36), S(14), S(32), S(32));
+        btnCerrar.Bounds = new Rectangle(ancho - margen - S(32), S(14), S(32), S(32));
+        btnNext.Bounds = new Rectangle(btnCerrar.Left - S(36), S(14), S(32), S(32));
+        btnPrev.Bounds = new Rectangle(btnNext.Left - S(48), S(14), S(32), S(32));
 
         int y = lblSub.Bottom + S(10);
 
@@ -677,9 +723,12 @@ public class MainForm : Form
 
         Controls.AddRange(new Control[]
         {
-            lblTitulo, lblSub, btnPrev, btnNext, tarjeta, entrada, btnAnadir,
+            lblTitulo, lblSub, btnPrev, btnNext, btnCerrar, tarjeta, entrada, btnAnadir,
             chipFecha, pildoraHora, chipImportante, calendario, panelEdicion, snackbar
         });
+        btnPrev.BringToFront();
+        btnNext.BringToFront();
+        btnCerrar.BringToFront();
         AcceptButton = btnAnadir; // Enter = añadir
 
         // --- Icono de bandeja y menú oscuro ---
@@ -730,6 +779,7 @@ public class MainForm : Form
         // --- Eventos ---
         btnPrev.Click += (s, e) => IrADia(dia.AddDays(-1));
         btnNext.Click += (s, e) => IrADia(dia.AddDays(1));
+        btnCerrar.Click += (s, e) => Hide();
         lblTitulo.Click += (s, e) => IrADia(DateTime.Today);
         btnAnadir.Click += (s, e) => Anadir();
         chipFecha.Click += (s, e) => AlternarCalendario();

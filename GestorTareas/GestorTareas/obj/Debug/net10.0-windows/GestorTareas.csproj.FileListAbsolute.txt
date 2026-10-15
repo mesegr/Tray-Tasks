@@ -27,4 +27,5 @@ D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\refi
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\GestorTareas.pdb
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\GestorTareas.genruntimeconfig.cache
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\ref\GestorTareas.dll
-D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\GestorTa.E283C1ED.Up2Date
+D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\TareasBandeja.Views.NotificationPopup.resources
+D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\GestorTareas.csproj.GenerateResource.cache

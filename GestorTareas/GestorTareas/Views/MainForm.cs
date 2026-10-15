@@ -499,6 +499,7 @@ public class MainForm : Form
     int hover = -1;
     bool salir;
     bool primeraVez = true;
+    readonly HashSet<(Tarea Tarea, int MinutosAntes)> recordatoriosMostrados = new();
 
     public MainForm()
     {
@@ -670,7 +671,7 @@ public class MainForm : Form
         // Aviso al arrancar si tienes tareas pendientes hoy
         int pendientes = PendientesHoy();
         if (pendientes > 0)
-            tray.ShowBalloonTip(4000, "Tareas de hoy", $"Tienes {pendientes} tarea(s) pendiente(s)", ToolTipIcon.Info);
+            Notificador.Mostrar("Tareas de hoy", $"Tienes {pendientes} tarea(s) pendiente(s)");
 
         // --- Eventos ---
         btnPrev.Click += (s, e) => IrADia(dia.AddDays(-1));
@@ -705,10 +706,15 @@ public class MainForm : Form
         reloj.Interval = 60_000;
         reloj.Tick += (s, e) =>
         {
-            if (DateTime.Today == ultimoDia) return;
-            ultimoDia = DateTime.Today;
-            IrADia(DateTime.Today);
+            if (DateTime.Today != ultimoDia)
+            {
+                ultimoDia = DateTime.Today;
+                IrADia(DateTime.Today);
+            }
+
+            ComprobarRecordatorios();
         };
+        ComprobarRecordatorios(alIniciar: true);
         reloj.Start();
     }
 
@@ -1024,13 +1030,61 @@ public class MainForm : Form
         tray.Text = n == 0 ? "Sin tareas pendientes hoy" : $"{n} tarea(s) pendiente(s) hoy";
     }
 
+    // Las tareas sin hora no tienen un instante concreto para calcular un aviso.
+    // Se comprueba cada minuto y cada aviso se muestra como máximo una vez por tarea.
+    void ComprobarRecordatorios(bool alIniciar = false)
+    {
+        DateTime ahora = DateTime.Now;
+
+        foreach (var tarea in controller.Tareas.Where(t => t.ConHora))
+        {
+            if (alIniciar)
+            {
+                // Si la aplicación se inicia tarde, no se pierde el aviso:
+                // se muestra el recordatorio que todavía sea relevante.
+                TimeSpan tiempoRestante = tarea.Fecha - ahora;
+                if (tiempoRestante > TimeSpan.Zero && tiempoRestante <= TimeSpan.FromMinutes(15))
+                    MostrarRecordatorio(tarea, 15);
+                else if (tiempoRestante > TimeSpan.FromMinutes(15) && tiempoRestante <= TimeSpan.FromHours(1))
+                    MostrarRecordatorio(tarea, 60);
+
+                continue;
+            }
+
+            MostrarRecordatorioSiCorresponde(tarea, ahora, 60);
+            MostrarRecordatorioSiCorresponde(tarea, ahora, 15);
+        }
+    }
+
+    void MostrarRecordatorioSiCorresponde(Tarea tarea, DateTime ahora, int minutosAntes)
+    {
+        DateTime momentoAviso = tarea.Fecha.AddMinutes(-minutosAntes);
+        bool dentroDeLaVentana = ahora >= momentoAviso && ahora < momentoAviso.AddMinutes(2);
+        var clave = (tarea, minutosAntes);
+
+        if (!dentroDeLaVentana || !recordatoriosMostrados.Add(clave)) return;
+
+        MostrarRecordatorio(tarea, minutosAntes);
+    }
+
+    void MostrarRecordatorio(Tarea tarea, int minutosAntes)
+    {
+        recordatoriosMostrados.Add((tarea, minutosAntes));
+
+        string texto = minutosAntes == 60
+            ? $"Falta menos de 1 hora para: {tarea.Titulo}"
+            : $"Faltan menos de 15 minutos para: {tarea.Titulo}";
+
+        Notificador.Mostrar("Recordatorio de tarea", texto);
+    }
+
     // ---------- Inicio automático con Windows ----------
     // Cada vez que se abre la app se registra la ruta de ese .exe para el próximo arranque
     static void RegistrarInicioAutomatico()
     {
         try
         {
-            using var clave = Registry.CurrentUser.OpenSubKey(ClaveInicio, true);
+            using var clave = Registry.CurrentUser.CreateSubKey(ClaveInicio);
             clave?.SetValue(NombreApp, $"\"{Application.ExecutablePath}\"");
         }
         catch

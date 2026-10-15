@@ -673,6 +673,7 @@ public class MainForm : Form
     readonly PlusButton btnAnadir = new();
     readonly Chip chipFecha = new();
     readonly Chip chipImportante = new();
+    readonly SelectorRedondeado repeticionNueva = new();
     readonly MiniCalendar calendario = new();
     readonly TareaEditPanel panelEdicion = new();
     readonly AjustesPanel panelAjustes = new();
@@ -729,7 +730,7 @@ public class MainForm : Form
         int ancho = S(340);
         int margen = S(16);
         int hueco = S(10);
-        int boton = S(40);
+        int boton = S(32);
 
         // --- Cabecera ---
         lblTitulo.AutoSize = false;
@@ -811,21 +812,32 @@ public class MainForm : Form
         y = tarjeta.Bottom + S(12);
 
         // --- Campo de texto en forma de píldora + botón "+" ---
-        entrada.Bounds = new Rectangle(margen, y, ancho - 2 * margen - boton - hueco, boton);
+        int anchoRepeticion = S(116);
+        int altoCampos = S(32);
+        int yCampos = y + (boton - altoCampos) / 2;
+        entrada.Bounds = new Rectangle(margen, y,
+            ancho - 2 * margen - boton - anchoRepeticion - 2 * hueco, altoCampos);
         entrada.Radius = Ui.RadioEsquina;
         entrada.BackColor = Ui.Fondo;
 
         txtNueva.BorderStyle = BorderStyle.None;
         txtNueva.BackColor = Ui.Tarjeta;
         txtNueva.ForeColor = Color.White;
-        txtNueva.Font = new Font("Segoe UI", 11f);
+        txtNueva.Font = new Font("Segoe UI", 9.5f);
         txtNueva.PlaceholderText = "Nueva tarea";
         txtNueva.MaxLength = 100;
         txtNueva.Width = entrada.Width - S(36);
         txtNueva.Location = new Point(S(18), (entrada.Height - txtNueva.Height) / 2);
         entrada.Controls.Add(txtNueva);
 
-        btnAnadir.Bounds = new Rectangle(entrada.Right + hueco, y, boton, boton);
+        repeticionNueva.Bounds = new Rectangle(entrada.Right + hueco, yCampos, anchoRepeticion, altoCampos);
+        repeticionNueva.BackColor = Ui.Tarjeta;
+        repeticionNueva.ForeColor = Color.White;
+        repeticionNueva.Font = new Font("Segoe UI", 9.5f);
+        repeticionNueva.Items.AddRange(new object[] { "No se repite", "Cada día", "Cada semana", "Cada mes" });
+        repeticionNueva.SelectedIndex = 0;
+
+        btnAnadir.Bounds = new Rectangle(repeticionNueva.Right + hueco, y, boton, boton);
 
         y = entrada.Bottom + S(10);
 
@@ -928,7 +940,7 @@ public class MainForm : Form
         Controls.AddRange(new Control[]
         {
             lblTitulo, lblSub, btnPrev, btnNext, btnAjustes, btnCerrar, barraFiltros, tarjeta, entrada, btnAnadir,
-            chipFecha, pildoraHora, chipImportante, calendario, panelEdicion, panelAjustes, snackbar
+            chipFecha, pildoraHora, chipImportante, repeticionNueva, calendario, panelEdicion, panelAjustes, snackbar
         });
         btnPrev.BringToFront();
         btnNext.BringToFront();
@@ -1542,13 +1554,15 @@ public class MainForm : Form
             Fecha = fecha,
             ConHora = conHora,
             Importante = chipImportante.Checked,
-            Creada = DateTime.Today
+            Creada = DateTime.Today,
+            Recurrencia = (RecurrenciaTarea)Math.Max(0, repeticionNueva.SelectedIndex)
         };
         controller.Anadir(nueva);
 
         txtNueva.Clear();
         txtHora.Clear();
         chipImportante.Checked = false;
+        repeticionNueva.SelectedIndex = 0;
         // Si la tarea no se ve en el día actual, saltamos al día de la tarea para que se vea dónde ha caído
         if (!TareasDelDia(dia).Contains(nueva))
             IrADia(fecha.Date);
@@ -1626,6 +1640,7 @@ public class MainForm : Form
     void ActualizarIcono()
     {
         int n = PendientesHoy();
+        Color colorEstado = n == 0 ? Ui.Verde : n <= 3 ? Ui.Naranja : Ui.Rojo;
 
         using var bmp = new Bitmap(32, 32);
         using (var g = Graphics.FromImage(bmp))
@@ -1634,21 +1649,15 @@ public class MainForm : Form
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             g.Clear(Color.Transparent);
 
-            using (var fondo = new SolidBrush(Ui.Azul))
+            using (var fondo = new SolidBrush(colorEstado))
             using (var forma = Ui.RoundedRect(new Rectangle(1, 1, 30, 30), 8))
                 g.FillPath(fondo, forma);
-            using (var tick = new Pen(Color.White, 3.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                g.DrawLines(tick, new[] { new Point(6, 16), new Point(12, 22), new Point(24, 9) });
 
-            if (n > 0)
-            {
-                using var fondoNumero = new SolidBrush(Ui.Rojo);
-                g.FillEllipse(fondoNumero, 15, 0, 17, 17);
-                string texto = n > 9 ? "9+" : n.ToString();
-                using var fuente = new Font("Segoe UI", texto.Length == 1 ? 10f : 7.5f, FontStyle.Bold, GraphicsUnit.Pixel);
-                using var formato = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-                g.DrawString(texto, fuente, Brushes.White, new RectangleF(15, 0, 17, 17), formato);
-            }
+            string texto = n > 99 ? "99+" : n.ToString();
+            float tamanoFuente = texto.Length == 1 ? 22f : texto.Length == 2 ? 17f : 12f;
+            using var fuente = new Font("Segoe UI", tamanoFuente, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var formato = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            g.DrawString(texto, fuente, Brushes.Black, new RectangleF(1, 1, 30, 30), formato);
         }
 
         IntPtr handle = bmp.GetHicon();
@@ -1659,7 +1668,12 @@ public class MainForm : Form
         iconoActual?.Dispose();
         iconoActual = nuevo;
 
-        tray.Text = n == 0 ? "Sin tareas pendientes hoy" : $"{n} tarea(s) pendiente(s) hoy";
+        tray.Text = n switch
+        {
+            0 => "0 tareas pendientes hoy",
+            1 => "1 tarea pendiente hoy",
+            _ => $"{n} tareas pendientes hoy"
+        };
     }
 
     // Las tareas sin hora no tienen un instante concreto para calcular un aviso.

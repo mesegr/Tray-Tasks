@@ -940,11 +940,15 @@ public class MainForm : Form
         btnAjustes.FlatAppearance.BorderSize = 0;
         btnAjustes.Cursor = Cursors.Hand;
         btnAjustes.TabStop = false;
-        btnCerrar.Bounds = new Rectangle(ancho - margen - S(32), S(14), S(32), S(32));
-        btnAjustes.Bounds = new Rectangle(btnCerrar.Left - S(36), S(14), S(32), S(32));
-        btnNext.Bounds = new Rectangle(btnAjustes.Left - S(36), S(14), S(32), S(32));
-        btnPrev.Bounds = new Rectangle(btnNext.Left - S(36), S(14), S(32), S(32));
-        btnCalendario.Bounds = new Rectangle(btnPrev.Left - S(36), S(14), S(32), S(32));
+        int ladoBotonCabecera = S(28);
+        int separacionBotonesCabecera = S(2);
+        int yBotonesCabecera = S(16);
+        btnCerrar.Bounds = new Rectangle(ancho - S(12) - ladoBotonCabecera, yBotonesCabecera, ladoBotonCabecera, ladoBotonCabecera);
+        btnAjustes.Bounds = new Rectangle(btnCerrar.Left - separacionBotonesCabecera - ladoBotonCabecera, yBotonesCabecera, ladoBotonCabecera, ladoBotonCabecera);
+        btnNext.Bounds = new Rectangle(btnAjustes.Left - separacionBotonesCabecera - ladoBotonCabecera, yBotonesCabecera, ladoBotonCabecera, ladoBotonCabecera);
+        btnPrev.Bounds = new Rectangle(btnNext.Left - separacionBotonesCabecera - ladoBotonCabecera, yBotonesCabecera, ladoBotonCabecera, ladoBotonCabecera);
+        btnCalendario.Bounds = new Rectangle(btnPrev.Left - separacionBotonesCabecera - ladoBotonCabecera, yBotonesCabecera, ladoBotonCabecera, ladoBotonCabecera);
+        lblTitulo.Width = btnCalendario.Left - S(28);
 
         int y = lblSub.Bottom + S(8);
 

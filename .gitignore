@@ -1,4 +1,18 @@
-   .vs/
-   bin/
-   obj/
-   *.user
+# IDE y datos locales de Visual Studio
+.vs/
+**/.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Compilación y publicación de .NET
+**/bin/
+**/obj/
+artifacts/
+publish/
+
+# Archivos del sistema
+Thumbs.db
+Desktop.ini
+.DS_Store

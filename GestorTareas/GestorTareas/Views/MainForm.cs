@@ -252,6 +252,56 @@ class CloseButton : Button
     }
 }
 
+// Botón discreto para abrir la vista de calendario.
+class CalendarButton : Button
+{
+    bool hover, down;
+
+    public CalendarButton()
+    {
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 0;
+        BackColor = Ui.Fondo;
+        Cursor = Cursors.Hand;
+        TabStop = false;
+        SetStyle(ControlStyles.Selectable, false);
+        DoubleBuffered = true;
+        AccessibleName = "Abrir calendario";
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = false; down = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnMouseDown(MouseEventArgs e) { down = true; Invalidate(); base.OnMouseDown(e); }
+    protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(Parent?.BackColor ?? Ui.Fondo);
+        if (hover || down)
+        {
+            using var fondo = new SolidBrush(down ? Ui.Hover : Ui.Tarjeta);
+            g.FillEllipse(fondo, 0, 0, Width - 1, Height - 1);
+        }
+
+        float size = Math.Min(Width, Height) * 0.46f;
+        float x = (Width - size) / 2f;
+        float y = (Height - size) / 2f + size * 0.06f;
+        float radio = Math.Max(2f, size * 0.12f);
+        using var forma = Ui.RoundedRect(Rectangle.Round(new RectangleF(x, y, size, size * 0.82f)), (int)radio);
+        using var linea = new Pen(Ui.Gris, Math.Max(1.3f, size * 0.075f))
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round
+        };
+        g.DrawPath(linea, forma);
+        g.DrawLine(linea, x + size * 0.25f, y - size * 0.02f, x + size * 0.25f, y + size * 0.18f);
+        g.DrawLine(linea, x + size * 0.75f, y - size * 0.02f, x + size * 0.75f, y + size * 0.18f);
+        g.DrawLine(linea, x + size * 0.04f, y + size * 0.27f, x + size * 0.96f, y + size * 0.27f);
+    }
+}
+
 class SettingsButton : Button
 {
     bool hover, down;
@@ -412,7 +462,7 @@ class MiniCalendar : Control
     int hoverDia = -1;
     int hoverNav = 0;
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Func<DateTime, bool>? TieneTareas { get; set; }
+    public Func<DateTime, int>? CantidadTareas { get; set; }
 
     public event EventHandler<DateTime>? DiaElegido;
 
@@ -535,11 +585,12 @@ class MiniCalendar : Control
             }
 
             TextRenderer.DrawText(g, d.ToString(), fDia, Rectangle.Round(celda), colTexto, centro);
-            if (TieneTareas?.Invoke(fecha) == true)
+            int cantidad = CantidadTareas?.Invoke(fecha) ?? 0;
+            if (cantidad > 0)
             {
                 float punto = Math.Max(3f, Math.Min(5f, celda.Height * 0.11f));
-                using var marca = new SolidBrush(fecha == sel.Date ? Color.White : Ui.Naranja);
-                g.FillEllipse(marca, Width / 2f - punto / 2f, celda.Bottom - punto * 1.6f, punto, punto);
+                using var marca = new SolidBrush(cantidad > 3 ? Ui.Rojo : Ui.Naranja);
+                g.FillEllipse(marca, celda.X + celda.Width / 2f - punto / 2f, celda.Bottom - punto * 1.6f, punto, punto);
             }
         }
     }
@@ -792,6 +843,7 @@ public class MainForm : Form
     readonly ChevronButton btnNext = new();
     readonly SettingsButton btnAjustes = new();
     readonly CloseButton btnCerrar = new();
+    readonly CalendarButton btnCalendario = new();
     readonly RoundedPanel tarjeta = new();
     readonly RoundedPanel barraFiltros = new();
     readonly RoundedPanel entrada = new();
@@ -834,6 +886,7 @@ public class MainForm : Form
     int ubicacionNotificaciones;
     readonly bool iniciadoPorWindows;
     bool salir;
+    bool calendarioParaNavegar;
     bool primeraVez = true;
     readonly HashSet<(Guid Id, DateTime Fecha, int MinutosAntes)> recordatoriosMostrados = new();
     ToolStripMenuItem? itemDeshacerBorrado;
@@ -887,10 +940,11 @@ public class MainForm : Form
         btnAjustes.FlatAppearance.BorderSize = 0;
         btnAjustes.Cursor = Cursors.Hand;
         btnAjustes.TabStop = false;
-        btnAjustes.Bounds = new Rectangle(ancho - margen - S(68), S(14), S(32), S(32));
         btnCerrar.Bounds = new Rectangle(ancho - margen - S(32), S(14), S(32), S(32));
+        btnAjustes.Bounds = new Rectangle(btnCerrar.Left - S(36), S(14), S(32), S(32));
         btnNext.Bounds = new Rectangle(btnAjustes.Left - S(36), S(14), S(32), S(32));
-        btnPrev.Bounds = new Rectangle(btnNext.Left - S(48), S(14), S(32), S(32));
+        btnPrev.Bounds = new Rectangle(btnNext.Left - S(36), S(14), S(32), S(32));
+        btnCalendario.Bounds = new Rectangle(btnPrev.Left - S(36), S(14), S(32), S(32));
 
         int y = lblSub.Bottom + S(8);
 
@@ -1015,7 +1069,7 @@ public class MainForm : Form
         calendario.Bounds = tarjeta.Bounds;
         calendario.Radius = Ui.RadioEsquina;
         calendario.Font = new Font("Segoe UI", 10f);
-        calendario.TieneTareas = controller.TieneTareas;
+        calendario.CantidadTareas = fecha => controller.ObtenerParaDia(fecha).Count(t => !t.Hecha);
         calendario.Visible = false;
 
         panelEdicion.Bounds = new Rectangle(tarjeta.Left, tarjeta.Top, tarjeta.Width,
@@ -1077,10 +1131,11 @@ public class MainForm : Form
         Controls.AddRange(new Control[]
         {
             lblTitulo, lblSub, btnPrev, btnNext, btnAjustes, btnCerrar, barraFiltros, tarjeta, entrada, btnAnadir,
-            chipFecha, pildoraHora, chipImportante, repeticionNueva, calendario, panelEdicion, panelAjustes, snackbar
+            chipFecha, btnCalendario, pildoraHora, chipImportante, repeticionNueva, calendario, panelEdicion, panelAjustes, snackbar
         });
         btnPrev.BringToFront();
         btnNext.BringToFront();
+        btnCalendario.BringToFront();
         btnAjustes.BringToFront();
         btnCerrar.BringToFront();
         AplicarTema(temaClaroHabilitado);
@@ -1164,11 +1219,17 @@ public class MainForm : Form
         lblTitulo.Click += (s, e) => IrADia(DateTime.Today);
         btnAnadir.Click += (s, e) => Anadir();
         chipFecha.Click += (s, e) => AlternarCalendario();
+        btnCalendario.Click += (s, e) => AlternarCalendario(navegarDia: true);
         calendario.DiaElegido += (s, d) =>
         {
-            fechaNueva = d.Date;
-            ActualizarChipFecha();
             calendario.Visible = false;
+            if (calendarioParaNavegar)
+                IrADia(d);
+            else
+            {
+                fechaNueva = d.Date;
+                ActualizarChipFecha();
+            }
             txtNueva.Focus();
         };
         txtHora.TextChanged += (s, e) => txtHora.ForeColor = Color.White;
@@ -1375,14 +1436,15 @@ public class MainForm : Form
         chipFecha.Text = fechaNueva.ToString("d MMM yyyy", es).Replace(".", "");
     }
 
-    void AlternarCalendario()
+    void AlternarCalendario(bool navegarDia = false)
     {
         if (calendario.Visible)
         {
             calendario.Visible = false;
             return;
         }
-        calendario.Seleccionado = fechaNueva;
+        calendarioParaNavegar = navegarDia;
+        calendario.Seleccionado = navegarDia ? dia : fechaNueva;
         calendario.Visible = true;
         calendario.BringToFront();
     }

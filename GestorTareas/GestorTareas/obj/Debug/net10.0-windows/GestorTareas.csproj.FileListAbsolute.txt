@@ -27,7 +27,6 @@ D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\refi
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\GestorTareas.pdb
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\GestorTareas.genruntimeconfig.cache
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\ref\GestorTareas.dll
-D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\TareasBandeja.Views.NotificationPopup.resources
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\GestorTareas.csproj.GenerateResource.cache
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\bin\Debug\net10.0-windows\Sounds\notification.mp3
 C:\Users\aleja\AppData\Local\Temp\GestorTareas-build-check\Sounds\notification.mp3
@@ -36,4 +35,5 @@ C:\Users\aleja\AppData\Local\Temp\GestorTareas-build-check\GestorTareas.deps.jso
 C:\Users\aleja\AppData\Local\Temp\GestorTareas-build-check\GestorTareas.runtimeconfig.json
 C:\Users\aleja\AppData\Local\Temp\GestorTareas-build-check\GestorTareas.dll
 C:\Users\aleja\AppData\Local\Temp\GestorTareas-build-check\GestorTareas.pdb
+D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\TareasBandeja.Views.PopupActionButton.resources
 D:\Proyectos\Tray-Tasks\GestorTareas\GestorTareas\obj\Debug\net10.0-windows\GestorTa.E283C1ED.Up2Date

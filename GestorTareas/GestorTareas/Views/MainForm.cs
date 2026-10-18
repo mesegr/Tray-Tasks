@@ -911,6 +911,7 @@ public class MainForm : Form
     bool calendarioParaNavegar;
     bool primeraVez = true;
     readonly HashSet<(Guid Id, DateTime Fecha, int MinutosAntes)> recordatoriosMostrados = new();
+    readonly Dictionary<(Guid Id, DateTime Fecha), (DateTime Vence, int Minutos)> recordatoriosPospuestos = new();
     ToolStripMenuItem? itemDeshacerBorrado;
     Tarea? tareaEnEdicion;
     Tarea? tareaContextual;
@@ -1191,8 +1192,11 @@ public class MainForm : Form
         menu.Items.Add("Abrir", null, (s, e) => BeginInvoke(new Action(Mostrar)));
         menu.Items.Add("Exportar copia…", null, (s, e) => ExportarCopia());
         menu.Items.Add("Restaurar copia…", null, (s, e) => RestaurarCopia());
-        menu.Items.Add("Acerca de Tareas", null, (s, e) => MessageBox.Show(this,
-            "Tareas\nRecordatorios sencillos desde la bandeja de Windows.", "Acerca de", MessageBoxButtons.OK, MessageBoxIcon.Information));
+        menu.Items.Add("Acerca de TrayTasks", null, (s, e) =>
+        {
+            using var acercaDe = new AboutForm();
+            acercaDe.ShowDialog(this);
+        });
         menu.Items.Add(new ToolStripSeparator());
         itemDeshacerBorrado = new ToolStripMenuItem("Deshacer borrado");
         menu.Items.Add(itemDeshacerBorrado);
@@ -1929,6 +1933,20 @@ public class MainForm : Form
             .Where(t => t.ConHora && !t.Hecha)
             .DistinctBy(t => (t.Id, t.Fecha));
 
+        foreach (var (clave, pospuesto) in recordatoriosPospuestos.ToArray())
+        {
+            if (ahora < pospuesto.Vence) continue;
+            recordatoriosPospuestos.Remove(clave);
+
+            var tareaPendiente = controller.ObtenerParaDia(clave.Fecha.Date)
+                .FirstOrDefault(t => t.Id == clave.Id && t.Fecha == clave.Fecha && t.ConHora && !t.Hecha);
+            if (tareaPendiente == null) continue;
+
+            var claveAviso = (tareaPendiente.Id, tareaPendiente.Fecha, pospuesto.Minutos);
+            if (!recordatoriosMostrados.Contains(claveAviso))
+                MostrarRecordatorio(tareaPendiente, pospuesto.Minutos);
+        }
+
         foreach (var tarea in ocurrenciasHoy)
         {
             if (alIniciar)
@@ -1981,14 +1999,37 @@ public class MainForm : Form
         string texto = minutosAntes == 60
             ? $"Falta menos de {periodo} para: {tarea.Titulo}"
             : $"Faltan menos de {periodo} para: {tarea.Titulo}";
+        int siguienteIntervalo = SiguienteIntervalo(minutosAntes);
 
         Notificador.Mostrar("Recordatorio de tarea", texto, sonidoHabilitado, duracionNotificacion,
             () => BeginInvoke(new Action(() =>
             {
                 Mostrar();
                 IrADia(tarea.Fecha.Date);
-            })));
+            })), $"Posponer {TextoIntervaloCorto(siguienteIntervalo)}", () =>
+            {
+                recordatoriosPospuestos[(tarea.Id, tarea.Fecha)] =
+                    (DateTime.Now.AddMinutes(siguienteIntervalo), siguienteIntervalo);
+            });
     }
+
+    static int SiguienteIntervalo(int minutos)
+    {
+        int[] intervalos = { 1440, 720, 480, 240, 120, 60, 45, 30, 15 };
+        int indice = Array.IndexOf(intervalos, minutos);
+        return indice >= 0 && indice < intervalos.Length - 1 ? intervalos[indice + 1] : 5;
+    }
+
+    static string TextoIntervaloCorto(int minutos) => minutos switch
+    {
+        1440 => "24 h",
+        720 => "12 h",
+        480 => "8 h",
+        240 => "4 h",
+        120 => "2 h",
+        60 => "1 h",
+        _ => $"{minutos} min"
+    };
 
     // ---------- Inicio automático con Windows ----------
     // Cada vez que se abre la app se registra la ruta de ese .exe para el próximo arranque

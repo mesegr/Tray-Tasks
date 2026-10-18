@@ -5,6 +5,45 @@ using System.Text;
 
 namespace TareasBandeja.Views;
 
+internal sealed class PopupActionButton : Control
+{
+    private readonly Color fondo;
+    private readonly Color texto;
+    private bool hover;
+    private bool pulsado;
+
+    public PopupActionButton(string etiqueta, Color fondo, Color texto)
+    {
+        Text = etiqueta;
+        this.fondo = fondo;
+        this.texto = texto;
+        Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+        Cursor = Cursors.Hand;
+        Size = new Size(TextRenderer.MeasureText(etiqueta, Font).Width + 24, 30);
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
+        BackColor = Color.Transparent;
+        TabStop = true;
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); hover = true; Invalidate(); }
+    protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = false; pulsado = false; Invalidate(); }
+    protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); pulsado = true; Invalidate(); }
+    protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); pulsado = false; Invalidate(); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        using var path = Ui.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), Height / 2);
+        Color color = hover || pulsado ? ControlPaint.Light(fondo, pulsado ? 0.08f : 0.16f) : fondo;
+        using var brush = new SolidBrush(color);
+        g.FillPath(brush, path);
+        TextRenderer.DrawText(g, Text, Font, ClientRectangle, texto,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+    }
+}
+
 /// <summary>
 /// Notificación visual independiente del sistema de notificaciones de Windows.
 /// </summary>
@@ -13,8 +52,10 @@ internal sealed class NotificationPopup : Form
     private readonly System.Windows.Forms.Timer animacion = new();
     private readonly System.Windows.Forms.Timer cierre = new();
     private bool saliendo;
+    private bool tieneAcciones;
 
-    public NotificationPopup(string titulo, string mensaje, bool reproducirSonido, Action? accion = null)
+    public NotificationPopup(string titulo, string mensaje, bool reproducirSonido, Action? accion = null,
+        string? textoPosponer = null, Action? posponer = null)
     {
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
@@ -58,7 +99,8 @@ internal sealed class NotificationPopup : Form
             lblMensaje.Font,
             new Size(320, 0),
             TextFormatFlags.WordBreak).Height;
-        int altoPopup = accion == null ? Math.Max(92, 58 + altoMensaje) : Math.Max(118, 82 + altoMensaje);
+        tieneAcciones = accion != null || posponer != null;
+        int altoPopup = tieneAcciones ? Math.Max(132, 96 + altoMensaje) : Math.Max(92, 58 + altoMensaje);
 
         Size = new Size(360, altoPopup);
         indicador.Height = altoPopup - 32;
@@ -68,21 +110,25 @@ internal sealed class NotificationPopup : Form
         Controls.Add(indicador);
         Controls.Add(lblTitulo);
         Controls.Add(lblMensaje);
+        const int margenHorizontal = 18;
+        const int separacionAcciones = 8;
+        int yAcciones = altoPopup - 42;
+        int bordeDerecho = Width - margenHorizontal;
         if (accion != null)
         {
-            var abrir = new Label
-            {
-                AutoSize = false,
-                Text = "Abrir tarea",
-                ForeColor = Ui.AzulClaro,
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight,
-                Cursor = Cursors.Hand,
-                Location = new Point(22, altoPopup - 25),
-                Size = new Size(320, 20)
-            };
-            abrir.Click += (_, _) => accion();
+            var abrir = new PopupActionButton("Abrir tarea", Ui.Azul, Color.White);
+            abrir.Location = new Point(bordeDerecho - abrir.Width, yAcciones);
+            abrir.Click += (_, _) => { accion(); CerrarAnimado(); };
             Controls.Add(abrir);
+            bordeDerecho = abrir.Left - separacionAcciones;
+        }
+
+        if (posponer != null)
+        {
+            var aplazar = new PopupActionButton(textoPosponer ?? "Posponer", Ui.Hover, Ui.Texto);
+            aplazar.Location = new Point(bordeDerecho - aplazar.Width, yAcciones);
+            aplazar.Click += (_, _) => { posponer(); CerrarAnimado(); };
+            Controls.Add(aplazar);
         }
 
         animacion.Interval = 15;
@@ -108,7 +154,7 @@ internal sealed class NotificationPopup : Form
 
     public void ProgramarCierre(int milisegundos)
     {
-        cierre.Interval = milisegundos;
+        cierre.Interval = tieneAcciones ? Math.Max(milisegundos, 10000) : milisegundos;
         cierre.Start();
     }
 
@@ -256,17 +302,18 @@ internal static class Notificador
     public static int DuracionAviso { get; set; } = 2000;
     public static int Posicion { get; set; }
 
-    private static readonly Queue<(string Titulo, string Mensaje, bool Sonido, int Duracion, Action? Accion)> pendientes = new();
-    private static readonly Queue<(string Titulo, string Mensaje, bool Sonido, int Duracion, Action? Accion)> colaSecuencial = new();
-    private static readonly Queue<(string Titulo, string Mensaje, bool Sonido, int Duracion, Action? Accion)> colaApilada = new();
+    private static readonly Queue<(string Titulo, string Mensaje, bool Sonido, int Duracion, Action? Accion, string? TextoPosponer, Action? Posponer)> pendientes = new();
+    private static readonly Queue<(string Titulo, string Mensaje, bool Sonido, int Duracion, Action? Accion, string? TextoPosponer, Action? Posponer)> colaSecuencial = new();
+    private static readonly Queue<(string Titulo, string Mensaje, bool Sonido, int Duracion, Action? Accion, string? TextoPosponer, Action? Posponer)> colaApilada = new();
     private static readonly List<NotificationPopup> activas = new();
     private static System.Windows.Forms.Timer? temporizadorLote;
     private static System.Windows.Forms.Timer? temporizadorApilado;
     private static NotificationPopup? secuencialActual;
 
-    public static void Mostrar(string titulo, string mensaje, bool reproducirSonido = true, int duracionMs = 2000, Action? accion = null)
+    public static void Mostrar(string titulo, string mensaje, bool reproducirSonido = true, int duracionMs = 2000,
+        Action? accion = null, string? textoPosponer = null, Action? posponer = null)
     {
-        pendientes.Enqueue((titulo, mensaje, reproducirSonido, Math.Clamp(duracionMs, 1000, 15000), accion));
+        pendientes.Enqueue((titulo, mensaje, reproducirSonido, Math.Clamp(duracionMs, 1000, 15000), accion, textoPosponer, posponer));
 
         // Espera unos milisegundos para agrupar avisos generados en el mismo ciclo
         // y decidir si corresponde reproducir uno o varios sonidos.
@@ -322,7 +369,8 @@ internal static class Notificador
         if (secuencialActual != null || colaSecuencial.Count == 0) return;
 
         var aviso = colaSecuencial.Dequeue();
-        secuencialActual = new NotificationPopup(aviso.Titulo, aviso.Mensaje, aviso.Sonido, aviso.Accion);
+        secuencialActual = new NotificationPopup(aviso.Titulo, aviso.Mensaje, aviso.Sonido,
+            aviso.Accion, aviso.TextoPosponer, aviso.Posponer);
         secuencialActual.FormClosed += (_, _) =>
         {
             secuencialActual = null;
@@ -340,7 +388,8 @@ internal static class Notificador
         if (colaApilada.Count == 0) return;
 
         var aviso = colaApilada.Dequeue();
-        var popup = new NotificationPopup(aviso.Titulo, aviso.Mensaje, reproducirSonido && aviso.Sonido, aviso.Accion);
+        var popup = new NotificationPopup(aviso.Titulo, aviso.Mensaje, reproducirSonido && aviso.Sonido,
+            aviso.Accion, aviso.TextoPosponer, aviso.Posponer);
         popup.PrepararEntrada();
         activas.Add(popup);
         popup.Show();

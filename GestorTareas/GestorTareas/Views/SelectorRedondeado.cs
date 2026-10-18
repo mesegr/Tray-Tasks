@@ -7,7 +7,9 @@ namespace TareasBandeja.Views;
 internal sealed class SelectorRedondeado : Control
 {
     private readonly Form menu = new();
-    private readonly FlowLayoutPanel opcionesMenu = new();
+    private readonly Panel opcionesMenu = new();
+    private readonly MenuScrollBar barraMenu;
+    private readonly int paddingMenu = 7;
     private bool hover;
     private int selectedIndex = -1;
 
@@ -40,20 +42,18 @@ internal sealed class SelectorRedondeado : Control
             ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
         TabStop = true;
 
-        opcionesMenu.FlowDirection = FlowDirection.TopDown;
-        opcionesMenu.WrapContents = false;
-        opcionesMenu.AutoSize = true;
-        opcionesMenu.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        opcionesMenu.Padding = new Padding(7);
+        opcionesMenu.AutoScroll = false;
         opcionesMenu.BackColor = Ui.Tarjeta;
+        opcionesMenu.MouseWheel += (_, e) => DesplazarMenu(e.Delta);
+        barraMenu = new MenuScrollBar(this);
+        barraMenu.Visible = false;
         menu.FormBorderStyle = FormBorderStyle.None;
         menu.ShowInTaskbar = false;
         menu.StartPosition = FormStartPosition.Manual;
-        menu.AutoSize = true;
-        menu.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        menu.AutoSize = false;
         menu.Padding = Padding.Empty;
         menu.BackColor = Ui.Tarjeta;
-        menu.Controls.Add(opcionesMenu);
+        menu.Controls.AddRange(new Control[] { opcionesMenu, barraMenu });
         menu.Deactivate += (_, _) => menu.Hide();
         menu.SizeChanged += (_, _) =>
         {
@@ -152,24 +152,41 @@ internal sealed class SelectorRedondeado : Control
         if (menu.Visible) { menu.Hide(); return; }
         if (Items.Count == 0 || !IsHandleCreated) return;
 
-        opcionesMenu.SuspendLayout();
         opcionesMenu.Controls.Clear();
+        barraMenu.Value = 0;
         for (int i = 0; i < Items.Count; i++)
         {
             var opcion = new OpcionSelector(Items[i]?.ToString() ?? string.Empty, i == selectedIndex, Font);
             int indice = i;
-            opcion.Width = Math.Max(80, Width - 8);
+            opcion.Width = Math.Max(0, Width - paddingMenu * 2);
+            opcion.Location = new Point(paddingMenu, paddingMenu + i * 42);
             opcion.Click += (_, _) => { SelectedIndex = indice; menu.Hide(); Focus(); };
+            opcion.MouseWheel += (_, e) => DesplazarMenu(e.Delta);
             opcionesMenu.Controls.Add(opcion);
         }
-        opcionesMenu.ResumeLayout(true);
 
-        menu.Width = Width;
-        menu.Location = PointToScreen(new Point(0, Height + 4));
-        var pantalla = Screen.FromControl(this).WorkingArea;
-        if (menu.Bottom > pantalla.Bottom)
-            menu.Top = PointToScreen(Point.Empty).Y - menu.Height - 4;
-        if (menu.Right > pantalla.Right) menu.Left = pantalla.Right - menu.Width;
+        var origen = PointToScreen(Point.Empty);
+        var anfitrion = FindForm();
+        Rectangle limites = anfitrion != null && anfitrion.IsHandleCreated
+            ? anfitrion.RectangleToScreen(anfitrion.ClientRectangle)
+            : Screen.FromControl(this).WorkingArea;
+        int alturaDeseada = Items.Count * 42 + paddingMenu * 2;
+        int espacioArriba = origen.Y - limites.Top - 4;
+        int alturaMaximaCompacta = (int)(6.5 * 42 + paddingMenu * 2);
+        int alturaMenu = Math.Min(alturaDeseada, Math.Min(alturaMaximaCompacta, Math.Max(42, espacioArriba)));
+        menu.ClientSize = new Size(Width, alturaMenu);
+        bool requiereScroll = alturaDeseada > alturaMenu;
+        int anchoBarra = requiereScroll ? 14 : 0;
+        opcionesMenu.Bounds = new Rectangle(0, 0, Width - anchoBarra, alturaMenu);
+        barraMenu.Bounds = new Rectangle(Width - anchoBarra, 0, anchoBarra, alturaMenu);
+        barraMenu.Visible = requiereScroll;
+        int anchoOpcion = Width - anchoBarra - paddingMenu * 2;
+        foreach (Control opcion in opcionesMenu.Controls) opcion.Width = Math.Max(0, anchoOpcion);
+        barraMenu.Configure(Items.Count * 42 + paddingMenu * 2, alturaMenu);
+        ActualizarDesplazamientoMenu();
+        menu.Location = new Point(origen.X, origen.Y - menu.Height - 4);
+        if (menu.Right > limites.Right) menu.Left = limites.Right - menu.Width;
+        if (menu.Left < limites.Left) menu.Left = limites.Left;
         menu.Show(FindForm());
         menu.BringToFront();
     }
@@ -215,6 +232,112 @@ internal sealed class SelectorRedondeado : Control
                 using var pen = new Pen(Ui.Azul, 1.8f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
                 g.DrawLines(pen, new[] { new PointF(15, Height / 2f), new PointF(18, Height / 2f + 3), new PointF(24, Height / 2f - 3) });
             }
+        }
+    }
+
+    private void DesplazarMenu(int delta)
+    {
+        if (!barraMenu.Visible || delta == 0) return;
+        barraMenu.Value = Math.Clamp(barraMenu.Value - Math.Sign(delta) * 42, 0, barraMenu.Maximum);
+        ActualizarDesplazamientoMenu();
+    }
+
+    private void ActualizarDesplazamientoMenu()
+    {
+        for (int i = 0; i < opcionesMenu.Controls.Count; i++)
+            opcionesMenu.Controls[i].Top = paddingMenu + i * 42 - barraMenu.Value;
+        barraMenu.Invalidate();
+    }
+
+    private sealed class MenuScrollBar : Control
+    {
+        private readonly SelectorRedondeado owner;
+        private bool hover;
+        private bool dragging;
+        private int dragOffset;
+        [System.ComponentModel.Browsable(false)]
+        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        public int Value { get; set; }
+        public int Maximum { get; private set; }
+        private int contentHeight;
+
+        public MenuScrollBar(SelectorRedondeado owner)
+        {
+            this.owner = owner;
+            BackColor = Ui.Tarjeta;
+            Cursor = Cursors.Hand;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        public void Configure(int contentHeight, int viewportHeight)
+        {
+            this.contentHeight = contentHeight;
+            Maximum = Math.Max(0, contentHeight - viewportHeight);
+            Value = Math.Clamp(Value, 0, Maximum);
+            Invalidate();
+        }
+
+        private (int top, int height) Thumb()
+        {
+            if (Maximum <= 0 || Height <= 0) return (0, Height);
+            int thumbHeight = Math.Clamp((int)Math.Round(Height * (Height / (double)contentHeight)), 24, Height);
+            int track = Math.Max(1, Height - thumbHeight - 12);
+            int top = 6 + (int)Math.Round(track * Value / (double)Maximum);
+            return (top, thumbHeight);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using (var fondo = new SolidBrush(Ui.Tarjeta)) e.Graphics.FillRectangle(fondo, ClientRectangle);
+            if (Maximum <= 0) return;
+            var (top, height) = Thumb();
+            int width = hover || dragging ? 4 : 3;
+            using var brush = new SolidBrush(Color.FromArgb(hover || dragging ? 190 : 125, Ui.Gris));
+            using var shape = Ui.RoundedRect(new Rectangle((Width - width) / 2, top, width, height), width / 2);
+            e.Graphics.FillPath(brush, shape);
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); hover = true; Invalidate(); }
+        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); if (!dragging) hover = false; Invalidate(); }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button != MouseButtons.Left || Maximum <= 0) return;
+            var (top, height) = Thumb();
+            if (e.Y >= top && e.Y <= top + height)
+            {
+                dragging = true;
+                dragOffset = e.Y - top;
+                Capture = true;
+            }
+            else
+            {
+                Value = Math.Clamp(Value + (e.Y < top ? -Height : Height), 0, Maximum);
+                owner.ActualizarDesplazamientoMenu();
+            }
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (!dragging) return;
+            var (_, height) = Thumb();
+            int track = Math.Max(1, Height - height - 12);
+            int top = Math.Clamp(e.Y - dragOffset - 6, 0, track);
+            Value = Math.Clamp((int)Math.Round(top * Maximum / (double)track), 0, Maximum);
+            owner.ActualizarDesplazamientoMenu();
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            dragging = false;
+            Capture = false;
+            Invalidate();
         }
     }
 }

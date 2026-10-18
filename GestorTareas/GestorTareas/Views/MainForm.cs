@@ -852,7 +852,7 @@ public class MainForm : Form
     static extern int SetWindowTheme(IntPtr hWnd, string appName, string? idList);
 
     readonly TareaController controller = new();
-    readonly Stack<Tarea> borradas = new();
+    readonly Stack<object> borradas = new();
     List<Tarea> visibles = new();     // lo que se muestra en la lista del día actual
     DateTime dia = DateTime.Today;    // día que se está viendo
     DateTime fechaNueva = DateTime.Today; // fecha elegida para la tarea que se va a crear
@@ -871,17 +871,20 @@ public class MainForm : Form
     readonly RoundedPanel entrada = new();
     readonly RoundedPanel pildoraHora = new();
     readonly BufferedListBox lista = new();
-    readonly TextBox txtBuscar = new();
+    readonly AppTextBox txtBuscar = new();
     readonly SelectorRedondeado filtroTareas = new();
     readonly TextBox txtNueva = new();
-    readonly MaskedTextBox txtHora = new();
+    readonly AppMaskedTextBox txtHora = new();
     readonly PlusButton btnAnadir = new();
     readonly Chip chipFecha = new();
     readonly Chip chipImportante = new();
     readonly SelectorRedondeado repeticionNueva = new();
+    readonly SelectorRedondeado proyectoNueva = new();
     readonly TaskScrollBar barraLista = new();
     readonly MiniCalendar calendario = new();
     readonly TareaEditPanel panelEdicion = new();
+    readonly ProjectCreatePanel panelCrearProyecto = new(Array.Empty<string>());
+    readonly ProjectManagerPanel panelGestionProyectos = new();
     readonly AjustesPanel panelAjustes = new();
     readonly UndoSnackbar snackbar = new();
     readonly System.Windows.Forms.Timer reloj = new();
@@ -910,6 +913,11 @@ public class MainForm : Form
     bool salir;
     bool calendarioParaNavegar;
     bool primeraVez = true;
+    bool actualizandoSelectorProyectos;
+    string proyectoParaNueva = "";
+    const string OpcionSinProyecto = "Sin proyecto";
+    const string OpcionCrearProyecto = "＋ Crear proyecto…";
+    const string OpcionGestionarProyectos = "⚙ Gestionar proyectos…";
     readonly HashSet<(Guid Id, DateTime Fecha, int MinutosAntes)> recordatoriosMostrados = new();
     readonly Dictionary<(Guid Id, DateTime Fecha), (DateTime Vence, int Minutos)> recordatoriosPospuestos = new();
     ToolStripMenuItem? itemDeshacerBorrado;
@@ -975,18 +983,18 @@ public class MainForm : Form
 
         int y = lblSub.Bottom + S(8);
 
-        barraFiltros.Bounds = new Rectangle(margen, y, ancho - 2 * margen, S(34));
+        barraFiltros.Bounds = new Rectangle(margen, y, ancho - 2 * margen, S(38));
         barraFiltros.Radius = Ui.RadioEsquina;
         barraFiltros.Fill = Ui.Tarjeta;
         barraFiltros.BackColor = Ui.Fondo;
-        txtBuscar.Bounds = new Rectangle(S(12), 0, S(132), S(34));
+        txtBuscar.Bounds = new Rectangle(S(12), 0, S(132), S(38));
         txtBuscar.BorderStyle = BorderStyle.None;
         txtBuscar.BackColor = Ui.Tarjeta;
         txtBuscar.ForeColor = Color.White;
         txtBuscar.Font = new Font("Segoe UI", 9.5f);
         txtBuscar.PlaceholderText = "Buscar tareas";
         txtBuscar.Location = new Point(S(12), (barraFiltros.Height - txtBuscar.PreferredHeight) / 2);
-        filtroTareas.Bounds = new Rectangle(S(150), 0, Math.Max(S(120), barraFiltros.Width - S(162)), S(34));
+        filtroTareas.Bounds = new Rectangle(S(150), 0, Math.Max(S(120), barraFiltros.Width - S(162)), S(38));
         filtroTareas.BackColor = Ui.Tarjeta;
         filtroTareas.ForeColor = Color.White;
         filtroTareas.Font = new Font("Segoe UI", 11f);
@@ -997,7 +1005,7 @@ public class MainForm : Form
         y = barraFiltros.Bottom + S(8);
 
         // --- Tarjeta con la lista ---
-        tarjeta.Bounds = new Rectangle(margen, y, ancho - 2 * margen, S(280));
+        tarjeta.Bounds = new Rectangle(margen, y, ancho - 2 * margen, S(242));
         tarjeta.Padding = new Padding(0, S(10), 0, S(10));
         tarjeta.Radius = Ui.RadioEsquina;
         tarjeta.BackColor = Ui.Fondo;
@@ -1032,8 +1040,17 @@ public class MainForm : Form
         // --- Campo de texto en forma de píldora + botón "+" ---
         int anchoRepeticion = S(116);
         int altoCampos = S(32);
-        int yCampos = y + (boton - altoCampos) / 2;
-        entrada.Bounds = new Rectangle(margen, y,
+        proyectoNueva.Bounds = new Rectangle(margen, y, ancho - 2 * margen, altoCampos);
+        proyectoNueva.BackColor = Ui.Tarjeta;
+        proyectoNueva.ForeColor = Color.White;
+        proyectoNueva.Font = new Font("Segoe UI", 9.5f);
+        proyectoNueva.Items.Add(OpcionSinProyecto);
+        proyectoNueva.Items.Add(OpcionCrearProyecto);
+        proyectoNueva.SelectedIndex = 0;
+
+        int yEntrada = proyectoNueva.Bottom + S(8);
+        int yCampos = yEntrada + (boton - altoCampos) / 2;
+        entrada.Bounds = new Rectangle(margen, yEntrada,
             ancho - 2 * margen - boton - anchoRepeticion - 2 * hueco, altoCampos);
         entrada.Radius = Ui.RadioEsquina;
         entrada.BackColor = Ui.Fondo;
@@ -1055,9 +1072,8 @@ public class MainForm : Form
         repeticionNueva.Items.AddRange(new object[] { "No se repite", "Cada día", "Cada semana", "Cada mes" });
         repeticionNueva.SelectedIndex = 0;
 
-        btnAnadir.Bounds = new Rectangle(repeticionNueva.Right + hueco, y, boton, boton);
-
-        y = entrada.Bottom + S(10);
+        btnAnadir.Bounds = new Rectangle(repeticionNueva.Right + hueco, yEntrada, boton, boton);
+        y = entrada.Bottom + S(8);
 
         // --- Fila de opciones: fecha, hora e importante ---
         int altoChip = S(32);
@@ -1078,7 +1094,8 @@ public class MainForm : Form
         txtHora.ForeColor = Color.White;
         txtHora.Font = new Font("Segoe UI", 10f);
         txtHora.TextAlign = HorizontalAlignment.Center;
-        txtHora.Width = S(46);
+        txtHora.Width = S(54);
+        txtHora.Height = S(26);
         txtHora.Location = new Point((pildoraHora.Width - txtHora.Width) / 2, (pildoraHora.Height - txtHora.Height) / 2);
         pildoraHora.Controls.Add(txtHora);
 
@@ -1099,8 +1116,7 @@ public class MainForm : Form
         calendario.CantidadTareas = fecha => controller.ObtenerParaDia(fecha).Count(t => !t.Hecha);
         calendario.Visible = false;
 
-        panelEdicion.Bounds = new Rectangle(tarjeta.Left, tarjeta.Top, tarjeta.Width,
-            Math.Max(S(320), alturaVentanaNormal - tarjeta.Top - margen));
+        panelEdicion.Bounds = tarjeta.Bounds;
         panelEdicion.Radius = Ui.RadioEsquina;
         panelEdicion.Visible = false;
         panelEdicion.Guardado += (_, tareaEditada) =>
@@ -1116,6 +1132,71 @@ public class MainForm : Form
         {
             tareaEnEdicion = null;
             panelEdicion.Visible = false;
+        };
+
+        panelCrearProyecto.Bounds = tarjeta.Bounds;
+        panelCrearProyecto.Radius = Ui.RadioEsquina;
+        panelCrearProyecto.Visible = false;
+        panelCrearProyecto.Guardado += nombreProyecto =>
+        {
+            string proyecto = controller.CrearProyecto(nombreProyecto);
+            panelCrearProyecto.Visible = false;
+            ActualizarSelectorProyectos(proyecto);
+            txtNueva.Focus();
+        };
+        panelCrearProyecto.Cancelado += (_, _) =>
+        {
+            panelCrearProyecto.Visible = false;
+            ActualizarSelectorProyectos(proyectoParaNueva);
+            txtNueva.Focus();
+        };
+
+        panelGestionProyectos.Bounds = tarjeta.Bounds;
+        panelGestionProyectos.Radius = Ui.RadioEsquina;
+        panelGestionProyectos.Visible = false;
+        panelGestionProyectos.CrearSolicitado += nombre =>
+        {
+            try
+            {
+                string creado = controller.CrearProyecto(nombre);
+                panelGestionProyectos.CargarProyectos(controller.Proyectos, creado);
+                ActualizarSelectorProyectos(creado);
+                panelEdicion.CargarProyectos(controller.Proyectos);
+            }
+            catch (Exception ex) { panelGestionProyectos.MostrarError(ex.Message); }
+        };
+        panelGestionProyectos.RenombrarSolicitado += (anterior, nuevo) =>
+        {
+            try
+            {
+                string renombrado = controller.RenombrarProyecto(anterior, nuevo);
+                if (string.Equals(proyectoParaNueva, anterior, StringComparison.CurrentCultureIgnoreCase))
+                    proyectoParaNueva = renombrado;
+                panelGestionProyectos.CargarProyectos(controller.Proyectos, renombrado);
+                ActualizarSelectorProyectos(proyectoParaNueva);
+                panelEdicion.CargarProyectos(controller.Proyectos);
+            }
+            catch (Exception ex) { panelGestionProyectos.MostrarError(ex.Message); }
+        };
+        panelGestionProyectos.EliminarSolicitado += nombre =>
+        {
+            var eliminado = controller.EliminarProyecto(nombre);
+            if (eliminado == null) return;
+            borradas.Push(eliminado);
+            if (itemDeshacerBorrado != null) itemDeshacerBorrado.Enabled = true;
+            if (string.Equals(proyectoParaNueva, nombre, StringComparison.CurrentCultureIgnoreCase))
+                proyectoParaNueva = "";
+            panelGestionProyectos.CargarProyectos(controller.Proyectos);
+            ActualizarSelectorProyectos(proyectoParaNueva);
+            panelEdicion.CargarProyectos(controller.Proyectos);
+            Refrescar();
+            snackbar.MostrarProyecto(nombre);
+        };
+        panelGestionProyectos.Cancelado += (_, _) =>
+        {
+            panelGestionProyectos.Visible = false;
+            ActualizarSelectorProyectos(proyectoParaNueva);
+            txtNueva.Focus();
         };
 
         panelAjustes.Bounds = new Rectangle(tarjeta.Left, tarjeta.Top, tarjeta.Width,
@@ -1164,7 +1245,7 @@ public class MainForm : Form
         Controls.AddRange(new Control[]
         {
             lblTitulo, lblSub, btnPrev, btnNext, btnAjustes, btnCerrar, barraFiltros, tarjeta, entrada, btnAnadir,
-            chipFecha, btnCalendario, pildoraHora, chipImportante, repeticionNueva, calendario, panelEdicion, panelAjustes, snackbar
+            proyectoNueva, chipFecha, btnCalendario, pildoraHora, chipImportante, repeticionNueva, calendario, panelEdicion, panelCrearProyecto, panelGestionProyectos, panelAjustes, snackbar
         });
         btnPrev.BringToFront();
         btnNext.BringToFront();
@@ -1221,6 +1302,7 @@ public class MainForm : Form
         {
             MessageBox.Show("No se pudieron cargar las tareas: " + ex.Message);
         }
+        ActualizarSelectorProyectos();
         ActualizarChipFecha();
         Refrescar();
         tray.Visible = true;
@@ -1254,6 +1336,7 @@ public class MainForm : Form
         btnCerrar.Click += (s, e) => Hide();
         lblTitulo.Click += (s, e) => IrADia(DateTime.Today);
         btnAnadir.Click += (s, e) => Anadir();
+        proyectoNueva.SelectedIndexChanged += (_, _) => CambiarProyectoNueva();
         chipFecha.Click += (s, e) => AlternarCalendario();
         btnCalendario.Click += (s, e) => AlternarCalendario(navegarDia: true);
         calendario.DiaElegido += (s, d) =>
@@ -1305,6 +1388,8 @@ public class MainForm : Form
                 if (calendario.Visible) calendario.Visible = false;
                 else if (panelAjustes.Visible) MostrarAjustes(false);
                 else if (panelEdicion.Visible) panelEdicion.Visible = false;
+                else if (panelCrearProyecto.Visible) panelCrearProyecto.Cancelar();
+                else if (panelGestionProyectos.Visible) panelGestionProyectos.Cancelar();
                 else if (Visible) Hide();
                 e.Handled = true;
             }
@@ -1462,6 +1547,8 @@ public class MainForm : Form
     {
         calendario.Visible = false;
         panelEdicion.Visible = false;
+        panelCrearProyecto.Visible = false;
+        panelGestionProyectos.Visible = false;
         panelAjustes.Visible = false;
     }
 
@@ -1501,17 +1588,20 @@ public class MainForm : Form
     (string? texto, Color color) Subtitulo(Tarea t, bool destacada)
     {
         string hora = t.ConHora ? " · " + t.Fecha.ToString("HH:mm") : "";
+        string? proyecto = string.IsNullOrWhiteSpace(t.Proyecto) ? null : $"Proyecto: {t.Proyecto}";
+        string? Combinar(string? detalle) => string.Join(" · ", new[] { detalle, proyecto }
+            .Where(parte => !string.IsNullOrWhiteSpace(parte)));
 
         if (destacada)
         {
             bool vencida = t.ConHora ? t.Fecha < DateTime.Now : t.Fecha.Date < DateTime.Today;
             return vencida
-                ? ($"Vencida · {FechaTxt(t.Fecha)}{hora}", Ui.Rojo)
-                : ($"Entrega {FechaTxt(t.Fecha)}{hora}", Ui.Naranja);
+                ? (Combinar($"Vencida · {FechaTxt(t.Fecha)}{hora}"), Ui.Rojo)
+                : (Combinar($"Entrega {FechaTxt(t.Fecha)}{hora}"), Ui.Naranja);
         }
-        if (t.Importante) return ($"Entrega {FechaTxt(t.Fecha)}{hora}", Ui.Gris);
-        if (t.ConHora) return (t.Fecha.ToString("HH:mm"), Ui.Gris);
-        return (null, Ui.Gris);
+        if (t.Importante) return (Combinar($"Entrega {FechaTxt(t.Fecha)}{hora}"), Ui.Gris);
+        if (t.ConHora) return (Combinar(t.Fecha.ToString("HH:mm")), Ui.Gris);
+        return (proyecto == null ? null : Combinar(null), Ui.Gris);
     }
 
     void DibujarItem(object? sender, DrawItemEventArgs e)
@@ -1663,6 +1753,7 @@ public class MainForm : Form
     {
         CerrarPanelesSuperpuestos();
         tareaEnEdicion = tarea;
+        panelEdicion.CargarProyectos(controller.Proyectos);
         panelEdicion.Editar(tareaEnEdicion);
         panelEdicion.Visible = true;
         panelEdicion.BringToFront();
@@ -1710,7 +1801,17 @@ public class MainForm : Form
     {
         if (borradas.Count == 0) return;
 
-        controller.Anadir(borradas.Pop());
+        var borrado = borradas.Pop();
+        if (borrado is Tarea tarea)
+            controller.Anadir(tarea);
+        else if (borrado is ProyectoEliminado proyecto)
+        {
+            controller.RestaurarProyecto(proyecto);
+            proyectoParaNueva = proyecto.Nombre;
+            ActualizarSelectorProyectos(proyecto.Nombre);
+            panelGestionProyectos.CargarProyectos(controller.Proyectos, proyecto.Nombre);
+            panelEdicion.CargarProyectos(controller.Proyectos);
+        }
         if (itemDeshacerBorrado != null)
             itemDeshacerBorrado.Enabled = borradas.Count > 0;
         Refrescar();
@@ -1727,7 +1828,7 @@ public class MainForm : Form
             AddExtension = true
         };
         if (dialogo.ShowDialog(this) != DialogResult.OK) return;
-        File.WriteAllText(dialogo.FileName, JsonSerializer.Serialize(controller.Tareas, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(dialogo.FileName, controller.ExportarCopia());
     }
 
     void RestaurarCopia()
@@ -1799,6 +1900,7 @@ public class MainForm : Form
             Fecha = fecha,
             ConHora = conHora,
             Importante = chipImportante.Checked,
+            Proyecto = proyectoParaNueva,
             Creada = DateTime.Today,
             Recurrencia = (RecurrenciaTarea)Math.Max(0, repeticionNueva.SelectedIndex)
         };
@@ -1816,6 +1918,62 @@ public class MainForm : Form
         AnimarTarea(nueva);
     }
 
+    void ActualizarSelectorProyectos(string? seleccionar = null)
+    {
+        if (seleccionar == null) seleccionar = proyectoParaNueva;
+        actualizandoSelectorProyectos = true;
+        proyectoNueva.Items.Clear();
+        proyectoNueva.Items.Add(OpcionSinProyecto);
+        proyectoNueva.Items.Add(OpcionCrearProyecto);
+        proyectoNueva.Items.Add(OpcionGestionarProyectos);
+        foreach (string proyecto in controller.Proyectos)
+            proyectoNueva.Items.Add(proyecto);
+
+        int indice = proyectoNueva.Items.FindIndex(item =>
+            string.Equals(item?.ToString(), string.IsNullOrWhiteSpace(seleccionar) ? OpcionSinProyecto : seleccionar,
+                StringComparison.CurrentCultureIgnoreCase));
+        proyectoNueva.SelectedIndex = indice >= 0 ? indice : 0;
+        string valorSeleccionado = proyectoNueva.SelectedItem?.ToString() ?? OpcionSinProyecto;
+        proyectoParaNueva = valorSeleccionado == OpcionSinProyecto || valorSeleccionado == OpcionCrearProyecto ||
+            valorSeleccionado == OpcionGestionarProyectos ? "" : valorSeleccionado;
+        actualizandoSelectorProyectos = false;
+    }
+
+    void CambiarProyectoNueva()
+    {
+        if (actualizandoSelectorProyectos) return;
+        string seleccionado = proyectoNueva.SelectedItem?.ToString() ?? OpcionSinProyecto;
+        if (seleccionado == OpcionCrearProyecto)
+        {
+            BeginInvoke(new Action(CrearProyectoDesdeSelector));
+            return;
+        }
+        if (seleccionado == OpcionGestionarProyectos)
+        {
+            BeginInvoke(new Action(AbrirGestionProyectos));
+            return;
+        }
+
+        proyectoParaNueva = seleccionado == OpcionSinProyecto ? "" : seleccionado;
+    }
+
+    void CrearProyectoDesdeSelector()
+    {
+        CerrarPanelesSuperpuestos();
+        panelCrearProyecto.ReconfigurarProyectos(controller.Proyectos);
+        panelCrearProyecto.Visible = true;
+        panelCrearProyecto.BringToFront();
+        panelCrearProyecto.EnfocarNombre();
+    }
+
+    void AbrirGestionProyectos()
+    {
+        CerrarPanelesSuperpuestos();
+        panelGestionProyectos.CargarProyectos(controller.Proyectos);
+        panelGestionProyectos.Visible = true;
+        panelGestionProyectos.BringToFront();
+    }
+
     void Refrescar()
     {
         hover = -1;
@@ -1823,7 +1981,8 @@ public class MainForm : Form
         IEnumerable<Tarea> resultado = TareasDelDia(dia);
         string consulta = txtBuscar.Text.Trim();
         if (consulta.Length > 0)
-            resultado = resultado.Where(t => t.Titulo.Contains(consulta, StringComparison.CurrentCultureIgnoreCase));
+            resultado = resultado.Where(t => t.Titulo.Contains(consulta, StringComparison.CurrentCultureIgnoreCase) ||
+                (t.Proyecto?.Contains(consulta, StringComparison.CurrentCultureIgnoreCase) ?? false));
         resultado = (filtroTareas.SelectedIndex) switch
         {
             1 => resultado.Where(t => !t.Hecha),

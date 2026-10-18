@@ -4,7 +4,7 @@ namespace TareasBandeja.Views;
 
 internal sealed class TareaEditDialog : Form
 {
-    private readonly TextBox titulo = new();
+    private readonly AppTextBox titulo = new();
     private readonly DateTimePicker fecha = new();
     private readonly DateTimePicker hora = new();
     private readonly CheckBox conHora = new();
@@ -25,7 +25,7 @@ internal sealed class TareaEditDialog : Form
         ClientSize = new Size(360, 245);
 
         var lblTitulo = CrearEtiqueta("Tarea", 18, 16);
-        titulo.Bounds = new Rectangle(18, 40, 324, 30);
+        titulo.Bounds = new Rectangle(18, 40, 324, 38);
         titulo.BackColor = Ui.Tarjeta;
         titulo.ForeColor = Color.White;
         titulo.BorderStyle = BorderStyle.FixedSingle;

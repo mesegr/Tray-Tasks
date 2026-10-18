@@ -10,7 +10,16 @@
     <Compile Update="Views\AppCheckBox.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Update="Views\AppTextInput.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Update="Views\NotificationPopup.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="Views\ProjectDialog.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="Views\ProjectManagerPanel.cs">
       <SubType>Component</SubType>
     </Compile>
     <Compile Update="Views\SelectorRedondeado.cs">

@@ -6,15 +6,17 @@ namespace TareasBandeja.Views;
 internal sealed class TareaEditPanel : RoundedPanel
 {
     private readonly Label encabezado = new();
-    private readonly TextBox titulo = new();
+    private readonly AppTextBox titulo = new();
     private readonly TextBox fechaVisible = new();
-    private readonly MaskedTextBox hora = new();
+    private readonly AppMaskedTextBox hora = new();
     private readonly Form calendarioPopup = new();
     private readonly MiniCalendar calendario = new();
     private readonly Chip conHora = new();
     private readonly Chip importante = new();
     private readonly Label etiquetaRecurrencia = new();
     private readonly SelectorRedondeado recurrencia = new();
+    private readonly Label etiquetaProyecto = new();
+    private readonly SelectorRedondeado proyecto = new();
     private readonly Button guardar;
     private readonly Button cancelar;
     private Tarea? original;
@@ -36,12 +38,12 @@ internal sealed class TareaEditPanel : RoundedPanel
         encabezado.AutoSize = true;
         encabezado.Location = new Point(18, 16);
 
-        titulo.Bounds = new Rectangle(18, 58, 272, 32);
+        titulo.Bounds = new Rectangle(18, 58, 272, 38);
         titulo.BackColor = Ui.Hover;
         titulo.ForeColor = Color.White;
         titulo.BorderStyle = BorderStyle.None;
         titulo.Font = new Font("Segoe UI", 10.5f);
-        titulo.Padding = new Padding(10, 4, 10, 0);
+        titulo.Padding = new Padding(0);
         titulo.Margin = new Padding(0);
         titulo.MaxLength = 100;
 
@@ -84,7 +86,7 @@ internal sealed class TareaEditPanel : RoundedPanel
         conHora.Height = 36;
         conHora.Click += (_, _) => hora.ReadOnly = !conHora.Checked;
 
-        hora.Bounds = new Rectangle(18, 152, 130, 36);
+        hora.Bounds = new Rectangle(18, 150, 130, 40);
         hora.Mask = "00:00";
         hora.PromptChar = '_';
         hora.HidePromptOnLeave = false;
@@ -120,12 +122,24 @@ internal sealed class TareaEditPanel : RoundedPanel
         recurrencia.Items.AddRange(new object[] { "No se repite", "Cada día", "Cada semana", "Cada mes" });
         recurrencia.SelectedIndex = 0;
 
+        etiquetaProyecto.Text = "Proyecto";
+        etiquetaProyecto.AutoSize = true;
+        etiquetaProyecto.ForeColor = Ui.Gris;
+        etiquetaProyecto.Font = new Font("Segoe UI", 8.5f);
+        etiquetaProyecto.Location = new Point(164, 198);
+        proyecto.Bounds = new Rectangle(164, 218, 126, 36);
+        proyecto.BackColor = Ui.Hover;
+        proyecto.ForeColor = Color.White;
+        proyecto.Font = new Font("Segoe UI", 9.5f);
+        proyecto.Items.Add("Sin proyecto");
+        proyecto.SelectedIndex = 0;
+
         guardar = CrearBoton("Guardar", Ui.Azul, 112, 252, 86);
         guardar.Click += (_, _) => GuardarCambios();
         cancelar = CrearBoton("Cancelar", Ui.Hover, 206, 252, 84);
         cancelar.Click += (_, _) => Cancelado?.Invoke(this, EventArgs.Empty);
 
-        Controls.AddRange(new Control[] { encabezado, titulo, fechaVisible, conHora, hora, importante, etiquetaRecurrencia, recurrencia, guardar, cancelar });
+        Controls.AddRange(new Control[] { encabezado, titulo, fechaVisible, conHora, hora, importante, etiquetaRecurrencia, recurrencia, etiquetaProyecto, proyecto, guardar, cancelar });
     }
 
     protected override void OnResize(EventArgs eventargs)
@@ -135,7 +149,14 @@ internal sealed class TareaEditPanel : RoundedPanel
         titulo.Region = new Region(Ui.RoundedRect(new Rectangle(0, 0, titulo.Width, titulo.Height), Ui.RadioEsquina));
         fechaVisible.Region = new Region(Ui.RoundedRect(new Rectangle(0, 0, fechaVisible.Width, fechaVisible.Height), Ui.RadioEsquina));
         hora.Region = new Region(Ui.RoundedRect(new Rectangle(0, 0, hora.Width, hora.Height), Ui.RadioEsquina));
-        recurrencia.Width = Math.Max(140, Width - 36);
+        int selectorGap = 10;
+        int anchoInterior = Math.Max(200, Width - 36);
+        int anchoColumna = Math.Max(90, (anchoInterior - selectorGap) / 2);
+        proyecto.Left = 18 + anchoColumna + selectorGap;
+        proyecto.Width = anchoColumna;
+        etiquetaProyecto.Left = proyecto.Left;
+        recurrencia.Left = 18;
+        recurrencia.Width = anchoColumna;
         cancelar.Left = Math.Max(18, Width - cancelar.Width - 18);
         guardar.Left = Math.Max(18, cancelar.Left - guardar.Width - 8);
         guardar.Top = cancelar.Top = Math.Max(18, Height - 18 - cancelar.Height);
@@ -153,9 +174,29 @@ internal sealed class TareaEditPanel : RoundedPanel
         hora.ReadOnly = !tarea.ConHora;
         importante.Checked = tarea.Importante;
         recurrencia.SelectedIndex = Math.Clamp((int)tarea.Recurrencia, 0, 3);
+        SeleccionarProyecto(tarea.Proyecto);
         titulo.Focus();
         titulo.SelectAll();
     }
+
+    public void CargarProyectos(IEnumerable<string> proyectosDisponibles)
+    {
+        string seleccionado = ProyectoSeleccionado;
+        proyecto.Items.Clear();
+        proyecto.Items.Add("Sin proyecto");
+        foreach (string nombre in proyectosDisponibles)
+            if (!string.IsNullOrWhiteSpace(nombre)) proyecto.Items.Add(nombre);
+        SeleccionarProyecto(seleccionado);
+    }
+
+    public void SeleccionarProyecto(string? nombre)
+    {
+        string valor = string.IsNullOrWhiteSpace(nombre) ? "Sin proyecto" : nombre;
+        int indice = proyecto.Items.FindIndex(p => string.Equals(p?.ToString(), valor, StringComparison.CurrentCultureIgnoreCase));
+        proyecto.SelectedIndex = indice >= 0 ? indice : 0;
+    }
+
+    private string ProyectoSeleccionado => proyecto.SelectedIndex <= 0 ? "" : proyecto.SelectedItem?.ToString() ?? "";
 
     private Button CrearBoton(string texto, Color fondo, int x, int y, int ancho) => new EditorButton
     {
@@ -185,6 +226,7 @@ internal sealed class TareaEditPanel : RoundedPanel
             Fecha = nuevaFecha,
             ConHora = conHora.Checked,
             Importante = importante.Checked,
+            Proyecto = ProyectoSeleccionado,
             Creada = original.Creada,
             Hecha = original.Hecha,
             Recurrencia = (RecurrenciaTarea)Math.Max(0, recurrencia.SelectedIndex),

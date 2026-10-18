@@ -10,6 +10,7 @@ public class Tarea
     public DateTime Fecha { get; set; } = DateTime.Today;
     public bool ConHora { get; set; }
     public bool Importante { get; set; }
+    public string Proyecto { get; set; } = "";
     public DateTime Creada { get; set; } = DateTime.Today;
 
     // Se conserva para poder leer tareas creadas por versiones antiguas.

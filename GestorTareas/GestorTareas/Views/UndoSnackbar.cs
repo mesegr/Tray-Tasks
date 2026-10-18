@@ -47,6 +47,17 @@ internal sealed class UndoSnackbar : Panel
     public void Mostrar(string titulo)
     {
         mensaje.Text = $"Has eliminado: {titulo}";
+        MostrarActual();
+    }
+
+    public void MostrarProyecto(string nombre)
+    {
+        mensaje.Text = $"Proyecto eliminado: {nombre}";
+        MostrarActual();
+    }
+
+    private void MostrarActual()
+    {
         Visible = true;
         BringToFront();
         temporizador.Stop();

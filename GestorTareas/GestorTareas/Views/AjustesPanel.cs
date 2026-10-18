@@ -306,7 +306,7 @@ internal sealed class AjustesPanel : RoundedPanel
     readonly Label encabezado = new();
     readonly Label descripcion = new();
     readonly Label etiquetaAtajo = new();
-    readonly TextBox capturaAtajo = new();
+    readonly AppTextBox capturaAtajo = new();
     readonly SelectorAvisosMultiples avisoPrevio = new();
     readonly SelectorRedondeado duracionAviso = new();
     readonly SelectorRedondeado ubicacionAviso = new();

@@ -334,9 +334,30 @@ class SettingsButton : Button
             g.FillEllipse(fondo, 0, 0, Width - 1, Height - 1);
         }
 
-        using var fuente = new Font("Segoe UI Symbol", 17f);
-        TextRenderer.DrawText(g, "⚙", fuente, ClientRectangle, down ? Color.White : Ui.Gris,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+        float tamano = Math.Min(Width, Height) * 0.48f;
+        float radio = tamano / 2f;
+        float cx = Width / 2f;
+        float cy = Height / 2f;
+        var puntos = new PointF[32];
+        for (int i = 0; i < puntos.Length; i++)
+        {
+            float radioPunto = radio * (i % 4 is 0 or 1 ? 0.76f : 1f);
+            double angulo = -Math.PI / 2 + i * Math.PI / 16;
+            puntos[i] = new PointF(cx + (float)Math.Cos(angulo) * radioPunto,
+                cy + (float)Math.Sin(angulo) * radioPunto);
+        }
+
+        using var engranaje = new GraphicsPath();
+        engranaje.AddPolygon(puntos);
+        var color = down ? Color.White : Ui.Gris;
+        using var linea = new Pen(color, Math.Max(1.2f, tamano * 0.095f))
+        {
+            LineJoin = LineJoin.Round
+        };
+        g.DrawPath(linea, engranaje);
+        float radioCentro = tamano * 0.17f;
+        using var centro = new Pen(color, Math.Max(1.1f, tamano * 0.085f));
+        g.DrawEllipse(centro, cx - radioCentro, cy - radioCentro, radioCentro * 2, radioCentro * 2);
     }
 }
 
@@ -806,6 +827,7 @@ public class MainForm : Form
     const uint MOD_ALT = 0x0001;
     const uint MOD_SHIFT = 0x0004;
     const uint MOD_WIN = 0x0008;
+    static readonly int[] IntervalosAvisoDisponibles = { 1440, 720, 480, 240, 120, 60, 45, 30, 15 };
 
     [DllImport("user32.dll")]
     static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -876,7 +898,7 @@ public class MainForm : Form
     Icon? iconoActual;
     DateTime ultimoDia = DateTime.Today;
     int hover = -1;
-    int avisoPrevioMinutos = 60;
+    int[] avisosPreviosMinutos = { 60, 15 };
     int duracionNotificacion = 2000;
     int alturaVentanaNormal;
     bool sonidoHabilitado = true;
@@ -1102,6 +1124,12 @@ public class MainForm : Form
         panelAjustes.Visible = false;
         panelAjustes.Editar(configuracionAtajo);
         CargarPreferencias();
+        panelAjustes.TemaCambiado += (_, _) =>
+        {
+            temaClaroHabilitado = panelAjustes.TemaClaroHabilitado;
+            AplicarTema(temaClaroHabilitado);
+            GuardarPreferencias();
+        };
         panelAjustes.Guardado += (_, nuevoAtajo) =>
         {
             if (!AplicarAtajo(nuevoAtajo))
@@ -1113,7 +1141,7 @@ public class MainForm : Form
 
             configuracionAtajo = nuevoAtajo;
             GuardarConfiguracionAtajo(nuevoAtajo);
-            avisoPrevioMinutos = panelAjustes.MinutosAviso;
+            avisosPreviosMinutos = panelAjustes.AvisosPrevios;
             duracionNotificacion = panelAjustes.DuracionNotificacion;
             sonidoHabilitado = panelAjustes.SonidoHabilitado;
             inicioAutomaticoHabilitado = panelAjustes.InicioAutomaticoHabilitado;
@@ -1215,7 +1243,7 @@ public class MainForm : Form
             calendario.Visible = false;
             panelEdicion.Visible = false;
             panelAjustes.Editar(configuracionAtajo);
-            panelAjustes.CargarPreferencias(avisoPrevioMinutos, duracionNotificacion, sonidoHabilitado,
+            panelAjustes.CargarPreferencias(avisosPreviosMinutos, duracionNotificacion, sonidoHabilitado,
                 inicioAutomaticoHabilitado, temaClaroHabilitado, ubicacionNotificaciones, mostrarVentanaAlIniciar);
             MostrarAjustes(true);
         };
@@ -1415,6 +1443,7 @@ public class MainForm : Form
 
     void MostrarAjustes(bool mostrar)
     {
+        if (mostrar) CerrarPanelesSuperpuestos();
         panelAjustes.Visible = mostrar;
         snackbar.Bounds = new Rectangle(S(12), ClientSize.Height - S(52), ClientSize.Width - S(24), S(42));
         if (Visible)
@@ -1423,6 +1452,13 @@ public class MainForm : Form
             Location = new Point(Math.Min(Location.X, area.Right - Width - S(12)), area.Bottom - Height - S(12));
         }
         if (mostrar) panelAjustes.BringToFront();
+    }
+
+    void CerrarPanelesSuperpuestos()
+    {
+        calendario.Visible = false;
+        panelEdicion.Visible = false;
+        panelAjustes.Visible = false;
     }
 
     // ---------- Textos de fechas ----------
@@ -1447,6 +1483,7 @@ public class MainForm : Form
             calendario.Visible = false;
             return;
         }
+        CerrarPanelesSuperpuestos();
         calendarioParaNavegar = navegarDia;
         calendario.Seleccionado = navegarDia ? dia : fechaNueva;
         calendario.Visible = true;
@@ -1620,6 +1657,7 @@ public class MainForm : Form
 
     void AbrirEdicion(Tarea tarea)
     {
+        CerrarPanelesSuperpuestos();
         tareaEnEdicion = tarea;
         panelEdicion.Editar(tareaEnEdicion);
         panelEdicion.Visible = true;
@@ -1896,18 +1934,22 @@ public class MainForm : Form
             if (alIniciar)
             {
                 // Si la aplicación se inicia tarde, no se pierde el aviso:
-                // se muestra el recordatorio que todavía sea relevante.
+                // se muestra una sola vez el intervalo seleccionado más cercano.
                 TimeSpan tiempoRestante = tarea.Fecha - ahora;
-                if (tiempoRestante > TimeSpan.Zero && tiempoRestante <= TimeSpan.FromMinutes(15))
-                    MostrarRecordatorio(tarea, 15);
-                else if (tiempoRestante > TimeSpan.FromMinutes(15) && tiempoRestante <= TimeSpan.FromMinutes(avisoPrevioMinutos))
-                    MostrarRecordatorio(tarea, avisoPrevioMinutos);
+                if (tiempoRestante > TimeSpan.Zero)
+                {
+                    int intervalo = avisosPreviosMinutos
+                        .Where(minutos => tiempoRestante <= TimeSpan.FromMinutes(minutos))
+                        .DefaultIfEmpty(0)
+                        .Min();
+                    if (intervalo > 0) MostrarRecordatorio(tarea, intervalo);
+                }
 
                 continue;
             }
 
-            MostrarRecordatorioSiCorresponde(tarea, ahora, avisoPrevioMinutos);
-            MostrarRecordatorioSiCorresponde(tarea, ahora, 15);
+            foreach (int intervalo in avisosPreviosMinutos)
+                MostrarRecordatorioSiCorresponde(tarea, ahora, intervalo);
         }
     }
 
@@ -1926,9 +1968,19 @@ public class MainForm : Form
     {
         recordatoriosMostrados.Add((tarea.Id, tarea.Fecha, minutosAntes));
 
+        string periodo = minutosAntes switch
+        {
+            1440 => "24 horas",
+            720 => "12 horas",
+            480 => "8 horas",
+            240 => "4 horas",
+            120 => "2 horas",
+            60 => "1 hora",
+            _ => $"{minutosAntes} minutos"
+        };
         string texto = minutosAntes == 60
-            ? $"Falta menos de 1 hora para: {tarea.Titulo}"
-            : $"Faltan menos de {minutosAntes} minutos para: {tarea.Titulo}";
+            ? $"Falta menos de {periodo} para: {tarea.Titulo}"
+            : $"Faltan menos de {periodo} para: {tarea.Titulo}";
 
         Notificador.Mostrar("Recordatorio de tarea", texto, sonidoHabilitado, duracionNotificacion,
             () => BeginInvoke(new Action(() =>
@@ -1961,7 +2013,21 @@ public class MainForm : Form
         try
         {
             using var clave = Registry.CurrentUser.OpenSubKey(@"Software\TareasBandeja");
-            avisoPrevioMinutos = Convert.ToInt32(clave?.GetValue("AvisoPrevio") ?? 60) <= 30 ? 30 : 60;
+            if (clave?.GetValue("AvisosPrevios") is string avisosGuardados)
+            {
+                avisosPreviosMinutos = avisosGuardados
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(valor => int.TryParse(valor, out int minutos) ? minutos : 0)
+                    .Where(IntervalosAvisoDisponibles.Contains)
+                    .Distinct()
+                    .OrderByDescending(minutos => minutos)
+                    .ToArray();
+            }
+            else
+            {
+                int legado = Convert.ToInt32(clave?.GetValue("AvisoPrevio") ?? 60) <= 30 ? 30 : 60;
+                avisosPreviosMinutos = new[] { legado, 15 };
+            }
             int duracion = Convert.ToInt32(clave?.GetValue("DuracionNotificacion") ?? 2000);
             duracionNotificacion = duracion <= 2000 ? 2000 : duracion <= 4000 ? 4000 : 6000;
             sonidoHabilitado = Convert.ToInt32(clave?.GetValue("SonidoHabilitado") ?? 1) != 0;
@@ -1973,7 +2039,7 @@ public class MainForm : Form
         catch { }
         Notificador.DuracionAviso = duracionNotificacion;
         Notificador.Posicion = ubicacionNotificaciones;
-        panelAjustes.CargarPreferencias(avisoPrevioMinutos, duracionNotificacion, sonidoHabilitado,
+        panelAjustes.CargarPreferencias(avisosPreviosMinutos, duracionNotificacion, sonidoHabilitado,
             inicioAutomaticoHabilitado, temaClaroHabilitado, ubicacionNotificaciones, mostrarVentanaAlIniciar);
     }
 
@@ -1982,7 +2048,8 @@ public class MainForm : Form
         try
         {
             using var clave = Registry.CurrentUser.CreateSubKey(@"Software\TareasBandeja");
-            clave?.SetValue("AvisoPrevio", avisoPrevioMinutos, RegistryValueKind.DWord);
+            clave?.SetValue("AvisosPrevios", string.Join(",", avisosPreviosMinutos), RegistryValueKind.String);
+            clave?.SetValue("AvisoPrevio", avisosPreviosMinutos.DefaultIfEmpty(30).Max(), RegistryValueKind.DWord);
             clave?.SetValue("DuracionNotificacion", duracionNotificacion, RegistryValueKind.DWord);
             clave?.SetValue("SonidoHabilitado", sonidoHabilitado ? 1 : 0, RegistryValueKind.DWord);
             clave?.SetValue("InicioAutomatico", inicioAutomaticoHabilitado ? 1 : 0, RegistryValueKind.DWord);

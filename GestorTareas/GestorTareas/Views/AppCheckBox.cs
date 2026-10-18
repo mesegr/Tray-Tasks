@@ -8,6 +8,8 @@ internal sealed class AppCheckBox : Control
     private bool hover;
     private bool marcado;
 
+    public event EventHandler? CheckedChanged;
+
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool Checked
@@ -18,6 +20,7 @@ internal sealed class AppCheckBox : Control
             if (marcado == value) return;
             marcado = value;
             Invalidate();
+            CheckedChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 

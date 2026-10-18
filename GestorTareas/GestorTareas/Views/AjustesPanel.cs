@@ -1,6 +1,305 @@
+using System.Drawing.Drawing2D;
+
 namespace TareasBandeja.Views;
 
 internal readonly record struct ConfiguracionAtajo(uint Modificadores, Keys Tecla);
+
+internal sealed class SelectorTema : Control
+{
+    private bool claro;
+    private float progreso;
+    private float destino;
+    private readonly System.Windows.Forms.Timer animador = new() { Interval = 15 };
+
+    public event EventHandler? TemaCambiado;
+
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool Claro
+    {
+        get => claro;
+        set
+        {
+            if (claro == value && destino == (value ? 1f : 0f)) return;
+            claro = value;
+            destino = value ? 1f : 0f;
+            if (!IsHandleCreated || !Visible)
+            {
+                progreso = destino;
+                animador.Stop();
+                Invalidate();
+                return;
+            }
+            animador.Start();
+        }
+    }
+
+    public SelectorTema()
+    {
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+        Cursor = Cursors.Hand;
+        TabStop = true;
+        BackColor = Ui.Tarjeta;
+        ForeColor = Ui.Texto;
+        Font = new Font("Segoe UI", 10.5f);
+        Size = new Size(72, 40);
+        animador.Tick += (_, _) =>
+        {
+            progreso += (destino - progreso) * 0.28f;
+            if (Math.Abs(destino - progreso) < 0.01f)
+            {
+                progreso = destino;
+                animador.Stop();
+            }
+            Invalidate();
+        };
+    }
+
+    protected override void OnClick(EventArgs e)
+    {
+        base.OnClick(e);
+        AlternarTema();
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.KeyCode is Keys.Space or Keys.Enter)
+        {
+            AlternarTema();
+            e.Handled = true;
+        }
+    }
+
+    private void AlternarTema()
+    {
+        Claro = !Claro;
+        TemaCambiado?.Invoke(this, EventArgs.Empty);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        var track = new Rectangle((Width - 72) / 2, (Height - 36) / 2, 72, 36);
+        using (var trackPath = Ui.RoundedRect(track, 18))
+        using (var trackBrush = new SolidBrush(Mezclar(Ui.Hover, Ui.Azul, progreso)))
+            g.FillPath(trackBrush, trackPath);
+
+        int thumbX = (int)Math.Round(track.Left + 3 + progreso * (track.Width - 36));
+        var thumb = new Rectangle(thumbX, track.Top + 3, 30, 30);
+        using var thumbBrush = new SolidBrush(Color.White);
+        g.FillEllipse(thumbBrush, thumb);
+
+        var centro = new PointF(thumb.Left + thumb.Width / 2f, thumb.Top + thumb.Height / 2f);
+        bool mostrarSol = progreso >= 0.5f;
+        using var icono = new Pen(mostrarSol ? Ui.Azul : Ui.Gris, 1.5f)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round
+        };
+        if (mostrarSol)
+        {
+            g.DrawEllipse(icono, centro.X - 4, centro.Y - 4, 8, 8);
+            for (int angulo = 0; angulo < 360; angulo += 45)
+            {
+                double radianes = angulo * Math.PI / 180;
+                float x1 = centro.X + (float)Math.Cos(radianes) * 6;
+                float y1 = centro.Y + (float)Math.Sin(radianes) * 6;
+                float x2 = centro.X + (float)Math.Cos(radianes) * 8;
+                float y2 = centro.Y + (float)Math.Sin(radianes) * 8;
+                g.DrawLine(icono, x1, y1, x2, y2);
+            }
+        }
+        else
+        {
+            using var luna = new SolidBrush(Ui.Gris);
+            using var recorte = new SolidBrush(Color.White);
+            g.FillEllipse(luna, centro.X - 6, centro.Y - 7, 13, 13);
+            g.FillEllipse(recorte, centro.X - 2, centro.Y - 9, 13, 13);
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) animador.Dispose();
+        base.Dispose(disposing);
+    }
+
+    static Color Mezclar(Color inicio, Color fin, float cantidad) => Color.FromArgb(
+        (int)(inicio.A + (fin.A - inicio.A) * cantidad),
+        (int)(inicio.R + (fin.R - inicio.R) * cantidad),
+        (int)(inicio.G + (fin.G - inicio.G) * cantidad),
+        (int)(inicio.B + (fin.B - inicio.B) * cantidad));
+}
+
+internal sealed class SelectorAvisosMultiples : Control
+{
+    private static readonly (int Minutos, string Texto)[] opciones =
+    {
+        (1440, "24 horas"), (720, "12 horas"), (480, "8 horas"), (240, "4 horas"),
+        (120, "2 horas"), (60, "1 hora"), (45, "45 min"), (30, "30 min"), (15, "15 min")
+    };
+
+    private readonly HashSet<int> seleccionados = new();
+    private readonly Dictionary<int, AppCheckBox> checks = new();
+    private readonly Form menu = new();
+    private readonly FlowLayoutPanel lista = new();
+    private bool hover;
+
+    public int[] Seleccionados => seleccionados.OrderByDescending(x => x).ToArray();
+
+    public SelectorAvisosMultiples()
+    {
+        BackColor = Ui.Hover;
+        ForeColor = Ui.Texto;
+        Cursor = Cursors.Hand;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+        TabStop = true;
+
+        lista.FlowDirection = FlowDirection.TopDown;
+        lista.WrapContents = false;
+        lista.Dock = DockStyle.Fill;
+        lista.Padding = new Padding(8);
+        lista.BackColor = Ui.Tarjeta;
+        menu.FormBorderStyle = FormBorderStyle.None;
+        menu.ShowInTaskbar = false;
+        menu.StartPosition = FormStartPosition.Manual;
+        menu.BackColor = Ui.Tarjeta;
+        menu.ClientSize = new Size(196, 9 * 32 + 16);
+        menu.Controls.Add(lista);
+        menu.Deactivate += (_, _) => menu.Hide();
+        menu.SizeChanged += (_, _) =>
+        {
+            if (menu.Width > 0 && menu.Height > 0)
+            {
+                using var path = Ui.RoundedRect(new Rectangle(0, 0, menu.Width, menu.Height), Ui.RadioEsquina);
+                menu.Region = new Region(path);
+            }
+        };
+
+        foreach (var (minutos, texto) in opciones)
+        {
+            var check = new AppCheckBox
+            {
+                Text = texto,
+                Font = new Font("Segoe UI", 10.5f),
+                BackColor = Ui.Tarjeta,
+                ForeColor = Ui.Texto,
+                Size = new Size(menu.ClientSize.Width - 16, 30),
+                Margin = new Padding(0, 1, 0, 1)
+            };
+            check.CheckedChanged += (_, _) =>
+            {
+                if (check.Checked) seleccionados.Add(minutos);
+                else seleccionados.Remove(minutos);
+                Invalidate();
+            };
+            checks.Add(minutos, check);
+            lista.Controls.Add(check);
+        }
+    }
+
+    public void Establecer(IEnumerable<int> valores)
+    {
+        var permitidos = opciones.Select(o => o.Minutos).ToHashSet();
+        seleccionados.Clear();
+        foreach (int valor in valores)
+            if (permitidos.Contains(valor)) seleccionados.Add(valor);
+        foreach (var (minutos, check) in checks)
+            check.Checked = seleccionados.Contains(minutos);
+        Invalidate();
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); hover = true; Invalidate(); }
+    protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = false; Invalidate(); }
+    protected override void OnClick(EventArgs e) { base.OnClick(e); AlternarMenu(); }
+
+    protected override void OnSizeChanged(EventArgs e)
+    {
+        base.OnSizeChanged(e);
+        ActualizarRecorte();
+    }
+
+    protected override bool IsInputKey(Keys keyData) =>
+        keyData is Keys.Down or Keys.Enter or Keys.Space or Keys.Escape || base.IsInputKey(keyData);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.KeyCode is Keys.Down or Keys.Enter or Keys.Space)
+        {
+            AlternarMenu();
+            e.Handled = true;
+        }
+        else if (e.KeyCode == Keys.Escape && menu.Visible)
+        {
+            menu.Hide();
+            e.Handled = true;
+        }
+    }
+
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+        if (!Visible) menu.Hide();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        var g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        using (var path = Ui.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), Ui.RadioEsquina))
+        using (var fondo = new SolidBrush(hover ? Ui.Hover : BackColor)) g.FillPath(fondo, path);
+
+        string texto = seleccionados.Count switch
+        {
+            0 => "Desactivado",
+            1 => "1 aviso",
+            _ => $"{seleccionados.Count} avisos"
+        };
+        TextRenderer.DrawText(g, texto, Font, new Rectangle(16, 0, Math.Max(0, Width - 48), Height),
+            Ui.Texto, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+
+        float cx = Width - 19, cy = Height / 2f;
+        using var flecha = new Pen(Ui.Gris, 1.6f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        g.DrawLines(flecha, new[] { new PointF(cx - 3, cy - 1), new PointF(cx, cy + 2), new PointF(cx + 3, cy - 1) });
+    }
+
+    private void ActualizarRecorte()
+    {
+        if (Width < 2 || Height < 2) return;
+        using var path = Ui.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), Ui.RadioEsquina);
+        var regionAnterior = Region;
+        Region = new Region(path);
+        regionAnterior?.Dispose();
+    }
+
+    private void AlternarMenu()
+    {
+        if (menu.Visible) { menu.Hide(); return; }
+        if (!IsHandleCreated) return;
+
+        foreach (var (minutos, check) in checks)
+            check.Checked = seleccionados.Contains(minutos);
+
+        menu.ClientSize = new Size(Width, menu.Height);
+        foreach (Control check in lista.Controls) check.Width = Width - 16;
+
+        var origen = PointToScreen(new Point(0, Height + 4));
+        var pantalla = Screen.FromControl(this).WorkingArea;
+        menu.Location = origen;
+        if (menu.Bottom > pantalla.Bottom)
+            menu.Top = PointToScreen(Point.Empty).Y - menu.Height - 4;
+        if (menu.Right > pantalla.Right) menu.Left = pantalla.Right - menu.Width;
+        menu.Show(FindForm());
+        menu.BringToFront();
+    }
+}
 
 internal sealed class AjustesPanel : RoundedPanel
 {
@@ -8,7 +307,7 @@ internal sealed class AjustesPanel : RoundedPanel
     readonly Label descripcion = new();
     readonly Label etiquetaAtajo = new();
     readonly TextBox capturaAtajo = new();
-    readonly SelectorRedondeado avisoPrevio = new();
+    readonly SelectorAvisosMultiples avisoPrevio = new();
     readonly SelectorRedondeado duracionAviso = new();
     readonly SelectorRedondeado ubicacionAviso = new();
     readonly Label etiquetaAviso = new();
@@ -16,7 +315,7 @@ internal sealed class AjustesPanel : RoundedPanel
     readonly Label etiquetaUbicacion = new();
     readonly AppCheckBox sonido = new();
     readonly AppCheckBox inicioAutomatico = new();
-    readonly AppCheckBox temaClaro = new();
+    readonly SelectorTema temaClaro = new();
     readonly AppCheckBox mostrarAlIniciar = new();
     readonly Panel contenido = new();
     ConfiguracionAtajo configuracion;
@@ -25,12 +324,13 @@ internal sealed class AjustesPanel : RoundedPanel
 
     public event EventHandler<ConfiguracionAtajo>? Guardado;
     public event EventHandler? Cancelado;
-    public int MinutosAviso => avisoPrevio.SelectedIndex == 0 ? 30 : 60;
+    public event EventHandler? TemaCambiado;
+    public int[] AvisosPrevios => avisoPrevio.Seleccionados;
     public int DuracionNotificacion => duracionAviso.SelectedIndex switch { 0 => 2000, 1 => 4000, _ => 6000 };
     public int UbicacionNotificacion => ubicacionAviso.SelectedIndex;
     public bool SonidoHabilitado => sonido.Checked;
     public bool InicioAutomaticoHabilitado => inicioAutomatico.Checked;
-    public bool TemaClaroHabilitado => temaClaro.Checked;
+    public bool TemaClaroHabilitado => temaClaro.Claro;
     public bool MostrarAlIniciarHabilitado => mostrarAlIniciar.Checked;
 
     public AjustesPanel()
@@ -49,7 +349,7 @@ internal sealed class AjustesPanel : RoundedPanel
         descripcion.AutoSize = true;
         descripcion.ForeColor = Ui.Gris;
         descripcion.Font = new Font("Segoe UI", 9.5f);
-        descripcion.Location = new Point(18, 50);
+        descripcion.Location = new Point(18, 56);
 
         etiquetaAtajo.Text = "Atajo para mostrar u ocultar la app";
         etiquetaAtajo.AutoSize = true;
@@ -72,17 +372,21 @@ internal sealed class AjustesPanel : RoundedPanel
         capturaAtajo.Enter += (_, _) => capturaAtajo.BackColor = Ui.Hover;
         capturaAtajo.Leave += (_, _) => capturaAtajo.BackColor = Ui.Hover;
 
-        ConfigurarEtiqueta(etiquetaAviso, "Aviso previo", new Point(18, 172));
+        ConfigurarEtiqueta(etiquetaAviso, "Avisos previos", new Point(18, 172));
         ConfigurarEtiqueta(etiquetaDuracion, "Duración", new Point(162, 172));
         ConfigurarEtiqueta(etiquetaUbicacion, "Posición de las notificaciones", new Point(18, 242));
-        ConfigurarSelector(avisoPrevio, new Point(18, 192), 129, "30 min", "60 min");
+        avisoPrevio.Location = new Point(18, 192);
+        avisoPrevio.Size = new Size(129, 36);
+        avisoPrevio.BackColor = Ui.Hover;
+        avisoPrevio.ForeColor = Color.White;
+        avisoPrevio.Font = new Font("Segoe UI", 11f);
+        avisoPrevio.Establecer(new[] { 60, 15 });
         ConfigurarSelector(duracionAviso, new Point(161, 192), 129, "2 segundos", "4 segundos", "6 segundos");
         ConfigurarSelector(ubicacionAviso, new Point(18, 262), 272, "Abajo a la derecha", "Abajo a la izquierda", "Arriba a la derecha", "Arriba a la izquierda");
         sonido.Text = "Reproducir sonido";
         inicioAutomatico.Text = "Iniciar con Windows";
-        temaClaro.Text = "Usar tema claro";
         mostrarAlIniciar.Text = "Mostrar ventana al iniciar Windows";
-        foreach (var opcion in new[] { sonido, inicioAutomatico, temaClaro, mostrarAlIniciar })
+        foreach (var opcion in new[] { sonido, inicioAutomatico, mostrarAlIniciar })
         {
             opcion.AutoSize = false;
             opcion.ForeColor = Color.White;
@@ -93,8 +397,9 @@ internal sealed class AjustesPanel : RoundedPanel
         }
         sonido.Top = 314;
         inicioAutomatico.Top = 340;
-        temaClaro.Top = 366;
-        mostrarAlIniciar.Top = 392;
+        temaClaro.Location = new Point(Width - 90, 8);
+        temaClaro.TemaCambiado += (_, _) => TemaCambiado?.Invoke(this, EventArgs.Empty);
+        mostrarAlIniciar.Top = 366;
 
         guardar = CrearBoton("Guardar", Ui.Azul, 0, 0, 86);
         guardar.Click += (_, _) => GuardarCambios();
@@ -103,8 +408,8 @@ internal sealed class AjustesPanel : RoundedPanel
 
         contenido.Location = Point.Empty;
         contenido.BackColor = Ui.Tarjeta;
-        contenido.AutoScroll = true;
-        contenido.AutoScrollMinSize = new Size(0, 500);
+        contenido.AutoScroll = false;
+        contenido.AutoScrollMinSize = Size.Empty;
         contenido.BorderStyle = BorderStyle.None;
         contenido.Controls.AddRange(new Control[] { encabezado, descripcion, etiquetaAtajo, capturaAtajo,
             etiquetaAviso, etiquetaDuracion, etiquetaUbicacion, avisoPrevio, duracionAviso, ubicacionAviso,
@@ -124,8 +429,11 @@ internal sealed class AjustesPanel : RoundedPanel
         const int separacion = 8;
         contenido.Bounds = new Rectangle(0, 0, Width, Math.Max(100, Height - 58));
         capturaAtajo.Width = Math.Max(120, Width - 36);
-        foreach (var opcion in new[] { sonido, inicioAutomatico, temaClaro, mostrarAlIniciar })
+        foreach (var opcion in new[] { sonido, inicioAutomatico, mostrarAlIniciar })
             opcion.Width = Math.Max(140, Width - 36);
+        temaClaro.Size = new Size(72, 40);
+        temaClaro.Left = Math.Max(18, Width - 18 - temaClaro.Width);
+        temaClaro.Top = encabezado.Top + Math.Max(0, (encabezado.Height - temaClaro.Height) / 2);
         int anchoInterior = Math.Max(140, Width - 36);
         int anchoColumna = Math.Max(80, (anchoInterior - 14) / 2);
         avisoPrevio.Width = anchoColumna;
@@ -148,13 +456,13 @@ internal sealed class AjustesPanel : RoundedPanel
         capturaAtajo.Text = FormatearAtajo(config);
     }
 
-    public void CargarPreferencias(int minutos, int duracion, bool activarSonido, bool iniciar, bool claro, int ubicacion = 0, bool mostrar = false)
+    public void CargarPreferencias(IEnumerable<int> avisos, int duracion, bool activarSonido, bool iniciar, bool claro, int ubicacion = 0, bool mostrar = false)
     {
-        avisoPrevio.SelectedIndex = minutos <= 30 ? 0 : 1;
+        avisoPrevio.Establecer(avisos);
         duracionAviso.SelectedIndex = duracion <= 2000 ? 0 : duracion <= 4000 ? 1 : 2;
         sonido.Checked = activarSonido;
         inicioAutomatico.Checked = iniciar;
-        temaClaro.Checked = claro;
+        temaClaro.Claro = claro;
         ubicacionAviso.SelectedIndex = Math.Clamp(ubicacion, 0, 3);
         mostrarAlIniciar.Checked = mostrar;
     }

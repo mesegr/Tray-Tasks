@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <AssemblyName>TrayTasks</AssemblyName>
     <Product>TrayTasks</Product>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Description>Tareas y recordatorios desde la bandeja de Windows.</Description>
     <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>

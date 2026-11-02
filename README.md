@@ -2,6 +2,17 @@
 
 TrayTasks es una aplicación de escritorio para Windows que permite organizar tareas y recordatorios desde la bandeja del sistema.
 
+<p align="center">
+  <img src="img/trayTasks1.jpg" width="24%" alt="Menú principal de VeilFire Requiem">
+  <img src="img/trayTasks2.jpg" width="24%" alt="Exploración por el desierto">
+  <img src="img/trayTasks3.jpg" width="24%" alt="Descripción de la tercera captura">
+  <img src="img/trayTasks4.jpg" width="24%" alt="Descripción de la tercera captura">
+</p>
+<p align="center">
+  <img src="img/trayTasks5.jpg" width="80%" alt="Menú principal de VeilFire Requiem">
+</p>
+
+
 ## Funciones
 
 - Tareas con fecha, hora e importancia.

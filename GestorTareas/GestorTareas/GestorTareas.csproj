@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <AssemblyName>TrayTasks</AssemblyName>
+    <RootNamespace>TrayTasks</RootNamespace>
     <Product>TrayTasks</Product>
     <Version>0.1.1</Version>
     <Description>Tareas y recordatorios desde la bandeja de Windows.</Description>

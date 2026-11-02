@@ -1,7 +1,7 @@
 using Microsoft.Win32;
-using TareasBandeja.Diagnostics;
+using TrayTasks.Diagnostics;
 
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 public partial class MainForm
 {

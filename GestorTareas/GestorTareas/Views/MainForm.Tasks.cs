@@ -1,10 +1,10 @@
 using System.Drawing.Drawing2D;
 using System.Globalization;
-using TareasBandeja.Controllers;
-using TareasBandeja.Diagnostics;
-using TareasBandeja.Models;
+using TrayTasks.Controllers;
+using TrayTasks.Diagnostics;
+using TrayTasks.Models;
 
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 public partial class MainForm
 {

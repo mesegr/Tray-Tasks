@@ -1,7 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 /// <summary>Selector propio: superficie pintada por la app y menú emergente sin controles nativos.</summary>
 internal sealed class SelectorRedondeado : Control

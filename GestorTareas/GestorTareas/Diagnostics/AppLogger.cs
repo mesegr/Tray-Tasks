@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace TareasBandeja.Diagnostics;
+namespace TrayTasks.Diagnostics;
 
 /// <summary>Registro local mínimo para diagnosticar fallos sin incluir el contenido de las tareas.</summary>
 public static class AppLogger

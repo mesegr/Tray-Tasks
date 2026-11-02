@@ -1,7 +1,7 @@
 using System.Globalization;
-using TareasBandeja.Models;
+using TrayTasks.Models;
 
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 internal sealed class TareaEditPanel : RoundedPanel
 {

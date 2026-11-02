@@ -2,9 +2,9 @@ using System.Drawing.Drawing2D;
 using System.Media;
 using System.Runtime.InteropServices;
 using System.Text;
-using TareasBandeja.Diagnostics;
+using TrayTasks.Diagnostics;
 
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 internal sealed class PopupActionButton : Control
 {

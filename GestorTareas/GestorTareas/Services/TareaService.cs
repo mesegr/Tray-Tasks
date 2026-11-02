@@ -1,6 +1,6 @@
-using TareasBandeja.Models;
+using TrayTasks.Models;
 
-namespace TareasBandeja.Services;
+namespace TrayTasks.Services;
 
 /// <summary>
 /// Reglas de dominio para consultar y generar las ocurrencias visibles de una tarea.

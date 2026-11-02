@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 internal sealed class AppTextBox : TextBox
 {

@@ -1,8 +1,8 @@
 using System.Text.Json;
-using TareasBandeja.Diagnostics;
-using TareasBandeja.Models;
+using TrayTasks.Diagnostics;
+using TrayTasks.Models;
 
-namespace TareasBandeja.Storage;
+namespace TrayTasks.Storage;
 
 /// <summary>Guarda los datos de la aplicación como JSON en el perfil del usuario.</summary>
 public sealed class JsonTareaRepository : ITareaRepository

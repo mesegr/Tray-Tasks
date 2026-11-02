@@ -1,4 +1,4 @@
-namespace TareasBandeja.Models;
+namespace TrayTasks.Models;
 
 /// <summary>
 /// Modelo persistido de una tarea.

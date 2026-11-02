@@ -1,6 +1,6 @@
-using TareasBandeja.Models;
+using TrayTasks.Models;
 
-namespace TareasBandeja.Storage;
+namespace TrayTasks.Storage;
 
 /// <summary>Persistencia de tareas y proyectos, desacoplada de las reglas de negocio.</summary>
 public interface ITareaRepository

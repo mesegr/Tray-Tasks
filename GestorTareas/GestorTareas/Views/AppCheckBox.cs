@@ -1,6 +1,6 @@
 using System.Drawing.Drawing2D;
 
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 /// <summary>Etiqueta de ajustes con un indicador circular propio.</summary>
 internal sealed class AppCheckBox : Control

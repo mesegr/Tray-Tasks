@@ -1,6 +1,6 @@
 using System.Drawing.Drawing2D;
 
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 internal sealed class AboutForm : Form
 {

@@ -1,6 +1,6 @@
-using TareasBandeja.Models;
+using TrayTasks.Models;
 
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 internal sealed class TareaEditDialog : Form
 {

@@ -1,11 +1,11 @@
 using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using TareasBandeja.Controllers;
-using TareasBandeja.Models;
-using TareasBandeja.Services;
-using TareasBandeja.Storage;
+using TrayTasks.Controllers;
+using TrayTasks.Models;
+using TrayTasks.Services;
+using TrayTasks.Storage;
 
-namespace TareasBandeja.Tests.Storage;
+namespace TrayTasks.Tests.Storage;
 
 [TestClass]
 public sealed class JsonTareaRepositoryTests

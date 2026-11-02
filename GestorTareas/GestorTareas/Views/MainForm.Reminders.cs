@@ -1,8 +1,9 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
-using TareasBandeja.Models;
+using TrayTasks.Models;
+using TrayTasks.Services;
 
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 public partial class MainForm
 {
@@ -56,60 +57,19 @@ public partial class MainForm
             .Concat(controller.ObtenerParaDia(ahora.Date.AddDays(1)))
             .Where(t => t.ConHora && !t.Hecha)
             .DistinctBy(t => (t.Id, t.Fecha));
+        IReadOnlyList<AvisoProgramado> avisos = recordatorioScheduler.Comprobar(
+            ocurrenciasHoy,
+            fecha => controller.ObtenerParaDia(fecha),
+            avisosPreviosMinutos,
+            ahora,
+            alIniciar);
 
-        foreach (var (clave, pospuesto) in recordatoriosPospuestos.ToArray())
-        {
-            if (ahora < pospuesto.Vence) continue;
-            recordatoriosPospuestos.Remove(clave);
-
-            var tareaPendiente = controller.ObtenerParaDia(clave.Fecha.Date)
-                .FirstOrDefault(t => t.Id == clave.Id && t.Fecha == clave.Fecha && t.ConHora && !t.Hecha);
-            if (tareaPendiente == null) continue;
-
-            var claveAviso = (tareaPendiente.Id, tareaPendiente.Fecha, pospuesto.Minutos);
-            if (!recordatoriosMostrados.Contains(claveAviso))
-                MostrarRecordatorio(tareaPendiente, pospuesto.Minutos);
-        }
-
-        foreach (var tarea in ocurrenciasHoy)
-        {
-            if (alIniciar)
-            {
-                // Si la aplicación se inicia tarde, no se pierde el aviso:
-                // se muestra una sola vez el intervalo seleccionado más cercano.
-                TimeSpan tiempoRestante = tarea.Fecha - ahora;
-                if (tiempoRestante > TimeSpan.Zero)
-                {
-                    int intervalo = avisosPreviosMinutos
-                        .Where(minutos => tiempoRestante <= TimeSpan.FromMinutes(minutos))
-                        .DefaultIfEmpty(0)
-                        .Min();
-                    if (intervalo > 0) MostrarRecordatorio(tarea, intervalo);
-                }
-
-                continue;
-            }
-
-            foreach (int intervalo in avisosPreviosMinutos)
-                MostrarRecordatorioSiCorresponde(tarea, ahora, intervalo);
-        }
-    }
-
-    void MostrarRecordatorioSiCorresponde(Tarea tarea, DateTime ahora, int minutosAntes)
-    {
-        DateTime momentoAviso = tarea.Fecha.AddMinutes(-minutosAntes);
-        bool dentroDeLaVentana = ahora >= momentoAviso && ahora < momentoAviso.AddMinutes(2);
-        var clave = (tarea.Id, tarea.Fecha, minutosAntes);
-
-        if (!dentroDeLaVentana || !recordatoriosMostrados.Add(clave)) return;
-
-        MostrarRecordatorio(tarea, minutosAntes);
+        foreach (AvisoProgramado aviso in avisos)
+            MostrarRecordatorio(aviso.Tarea, aviso.MinutosAntes);
     }
 
     void MostrarRecordatorio(Tarea tarea, int minutosAntes)
     {
-        recordatoriosMostrados.Add((tarea.Id, tarea.Fecha, minutosAntes));
-
         string periodo = minutosAntes switch
         {
             1440 => "24 horas",
@@ -123,7 +83,7 @@ public partial class MainForm
         string texto = minutosAntes == 60
             ? $"Falta menos de {periodo} para: {tarea.Titulo}"
             : $"Faltan menos de {periodo} para: {tarea.Titulo}";
-        int siguienteIntervalo = SiguienteIntervalo(minutosAntes);
+        int siguienteIntervalo = RecordatorioScheduler.SiguienteIntervalo(minutosAntes);
 
         Notificador.Mostrar("Recordatorio de tarea", texto, sonidoHabilitado, duracionNotificacion,
             () => BeginInvoke(new Action(() =>
@@ -132,16 +92,8 @@ public partial class MainForm
                 IrADia(tarea.Fecha.Date);
             })), $"Posponer {TextoIntervaloCorto(siguienteIntervalo)}", () =>
             {
-                recordatoriosPospuestos[(tarea.Id, tarea.Fecha)] =
-                    (DateTime.Now.AddMinutes(siguienteIntervalo), siguienteIntervalo);
+                recordatorioScheduler.Posponer(tarea, siguienteIntervalo, DateTime.Now);
             });
-    }
-
-    static int SiguienteIntervalo(int minutos)
-    {
-        int[] intervalos = { 1440, 720, 480, 240, 120, 60, 45, 30, 15 };
-        int indice = Array.IndexOf(intervalos, minutos);
-        return indice >= 0 && indice < intervalos.Length - 1 ? intervalos[indice + 1] : 5;
     }
 
     static string TextoIntervaloCorto(int minutos) => minutos switch

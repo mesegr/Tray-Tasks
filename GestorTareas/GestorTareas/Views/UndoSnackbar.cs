@@ -1,4 +1,4 @@
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 internal sealed class UndoSnackbar : Panel
 {

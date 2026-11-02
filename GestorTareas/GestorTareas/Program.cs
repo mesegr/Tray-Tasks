@@ -1,7 +1,7 @@
-using TareasBandeja.Views;
-using TareasBandeja.Diagnostics;
+using TrayTasks.Views;
+using TrayTasks.Diagnostics;
 
-namespace TareasBandeja;
+namespace TrayTasks;
 
 static class Program
 {

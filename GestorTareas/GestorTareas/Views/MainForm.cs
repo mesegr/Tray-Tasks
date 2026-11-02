@@ -5,11 +5,12 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Win32;
-using TareasBandeja.Controllers;
-using TareasBandeja.Diagnostics;
-using TareasBandeja.Models;
+using TrayTasks.Controllers;
+using TrayTasks.Diagnostics;
+using TrayTasks.Models;
+using TrayTasks.Services;
 
-namespace TareasBandeja.Views;
+namespace TrayTasks.Views;
 
 public partial class MainForm : Form
 {
@@ -44,6 +45,7 @@ public partial class MainForm : Form
     static extern int SetWindowTheme(IntPtr hWnd, string appName, string? idList);
 
     readonly TareaController controller = new();
+    readonly RecordatorioScheduler recordatorioScheduler = new();
     readonly Stack<object> borradas = new();
     List<Tarea> visibles = new();     // lo que se muestra en la lista del día actual
     DateTime dia = DateTime.Today;    // día que se está viendo
@@ -110,8 +112,6 @@ public partial class MainForm : Form
     const string OpcionSinProyecto = "Sin proyecto";
     const string OpcionCrearProyecto = "＋ Crear proyecto…";
     const string OpcionGestionarProyectos = "⚙ Gestionar proyectos…";
-    readonly HashSet<(Guid Id, DateTime Fecha, int MinutosAntes)> recordatoriosMostrados = new();
-    readonly Dictionary<(Guid Id, DateTime Fecha), (DateTime Vence, int Minutos)> recordatoriosPospuestos = new();
     ToolStripMenuItem? itemDeshacerBorrado;
     Tarea? tareaEnEdicion;
     Tarea? tareaContextual;

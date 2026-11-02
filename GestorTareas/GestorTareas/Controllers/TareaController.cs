@@ -1,8 +1,8 @@
-using TareasBandeja.Models;
-using TareasBandeja.Services;
-using TareasBandeja.Storage;
+using TrayTasks.Models;
+using TrayTasks.Services;
+using TrayTasks.Storage;
 
-namespace TareasBandeja.Controllers;
+namespace TrayTasks.Controllers;
 
 /// <summary>
 /// Fachada de aplicación para tareas y proyectos.

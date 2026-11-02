@@ -250,7 +250,10 @@ public sealed class TareaController
     {
         if (tarea.Recurrencia == RecurrenciaTarea.Ninguna)
         {
-            if (tarea.Fecha.Date == dia || (tarea.Importante && dia >= tarea.Creada.Date))
+            // Las tareas importantes se arrastran desde su creación hasta la fecha límite,
+            // pero no deben marcar como ocupados los días posteriores a esa fecha.
+            if (tarea.Fecha.Date == dia ||
+                (tarea.Importante && dia >= tarea.Creada.Date && dia <= tarea.Fecha.Date))
                 yield return tarea;
             yield break;
         }
@@ -282,7 +285,7 @@ public sealed class TareaController
     }
 
     public static bool EsDestacada(Tarea tarea, DateTime dia) =>
-        tarea.Importante && dia.Date >= tarea.Creada.Date;
+        tarea.Importante && dia.Date >= tarea.Creada.Date && dia.Date <= tarea.Fecha.Date;
 
     private sealed class CopiaTareas
     {

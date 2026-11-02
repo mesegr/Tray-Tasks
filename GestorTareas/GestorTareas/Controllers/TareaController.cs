@@ -1,57 +1,40 @@
-using System.Text.Json;
 using TareasBandeja.Models;
+using TareasBandeja.Services;
+using TareasBandeja.Storage;
 
 namespace TareasBandeja.Controllers;
 
 /// <summary>
-/// Coordina las operaciones de negocio y la persistencia de las tareas.
-/// La vista no necesita conocer el formato ni la ubicación del archivo JSON.
+/// Fachada de aplicación para tareas y proyectos.
+/// Delega las reglas de calendario y la persistencia en sus componentes dedicados.
 /// </summary>
 public sealed class TareaController
 {
-    private readonly string rutaJson = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "TareasBandeja", "tareas.json");
-    private string RutaProyectos => Path.Combine(Path.GetDirectoryName(rutaJson)!, "proyectos.json");
-    private string RutaRespaldo => Path.ChangeExtension(rutaJson, ".backup.json");
-
     private readonly List<Tarea> tareas = new();
     private readonly List<string> proyectos = new();
+    private readonly ITareaRepository repositorio;
+
+    public TareaController(ITareaRepository? repositorio = null)
+    {
+        this.repositorio = repositorio ?? new JsonTareaRepository();
+    }
 
     public IReadOnlyList<Tarea> Tareas => tareas;
     public IReadOnlyList<string> Proyectos => proyectos;
 
     public void Cargar()
     {
-        List<Tarea>? datos = new();
-        if (File.Exists(rutaJson))
-        {
-            try
-            {
-                datos = JsonSerializer.Deserialize<List<Tarea>>(File.ReadAllText(rutaJson));
-            }
-            catch (JsonException) when (File.Exists(RutaRespaldo))
-            {
-                datos = JsonSerializer.Deserialize<List<Tarea>>(File.ReadAllText(RutaRespaldo));
-                if (datos != null)
-                    File.WriteAllText(rutaJson, JsonSerializer.Serialize(datos));
-            }
-        }
+        TareaSnapshot datos = repositorio.Cargar();
+        tareas.Clear();
+        proyectos.Clear();
 
-        foreach (var tarea in datos ?? new List<Tarea>())
+        foreach (var tarea in datos.Tareas)
         {
-            if (tarea.Id == Guid.Empty) tarea.Id = Guid.NewGuid();
-            tarea.FechasCompletadas ??= new List<DateTime>();
-            tarea.Proyecto ??= "";
+            Normalizar(tarea);
             tareas.Add(tarea);
         }
 
-        try
-        {
-            if (File.Exists(RutaProyectos))
-                proyectos.AddRange(JsonSerializer.Deserialize<List<string>>(File.ReadAllText(RutaProyectos)) ?? new());
-        }
-        catch { }
+        proyectos.AddRange(datos.Proyectos.Where(nombre => !string.IsNullOrWhiteSpace(nombre)));
 
         bool cambioProyectos = false;
         foreach (string nombre in tareas.Select(t => t.Proyecto).Where(p => !string.IsNullOrWhiteSpace(p)))
@@ -60,18 +43,17 @@ public sealed class TareaController
             proyectos.Add(nombre);
             cambioProyectos = true;
         }
-        if (cambioProyectos) GuardarProyectos();
+        if (cambioProyectos) repositorio.GuardarProyectos(proyectos);
     }
 
-    public void Guardar()
+    private static void Normalizar(Tarea tarea)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(rutaJson)!);
-        string temporal = rutaJson + ".tmp";
-        File.WriteAllText(temporal, JsonSerializer.Serialize(tareas));
-        if (File.Exists(rutaJson)) File.Copy(rutaJson, RutaRespaldo, overwrite: true);
-        File.Move(temporal, rutaJson, overwrite: true);
-        GuardarProyectos();
+        if (tarea.Id == Guid.Empty) tarea.Id = Guid.NewGuid();
+        tarea.FechasCompletadas ??= new List<DateTime>();
+        tarea.Proyecto ??= "";
     }
+
+    public void Guardar() => repositorio.Guardar(tareas, proyectos);
 
     public string CrearProyecto(string nombre)
     {
@@ -79,7 +61,7 @@ public sealed class TareaController
         ValidarNombreProyecto(nombre);
 
         proyectos.Add(nombre);
-        GuardarProyectos();
+        repositorio.GuardarProyectos(proyectos);
         return nombre;
     }
 
@@ -135,56 +117,24 @@ public sealed class TareaController
     }
 
     public string ExportarCopia()
-    {
-        var copia = new CopiaTareas
-        {
-            Tareas = tareas,
-            Proyectos = proyectos
-        };
-        return JsonSerializer.Serialize(copia, new JsonSerializerOptions { WriteIndented = true });
-    }
+        => repositorio.ExportarCopia(tareas, proyectos);
 
     public void ReemplazarDesdeArchivo(string ruta)
     {
-        using var documento = JsonDocument.Parse(File.ReadAllText(ruta));
-        List<Tarea>? datos;
-        List<string> proyectosCopia;
-        if (documento.RootElement.ValueKind == JsonValueKind.Array)
-        {
-            datos = JsonSerializer.Deserialize<List<Tarea>>(documento.RootElement.GetRawText());
-            proyectosCopia = datos?.Select(t => t.Proyecto).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.CurrentCultureIgnoreCase).ToList() ?? new();
-        }
-        else if (documento.RootElement.ValueKind == JsonValueKind.Object)
-        {
-            var copia = JsonSerializer.Deserialize<CopiaTareas>(documento.RootElement.GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            datos = copia?.Tareas;
-            proyectosCopia = copia?.Proyectos ?? new();
-        }
-        else throw new InvalidDataException("El archivo no contiene una copia de tareas válida.");
-
-        if (datos == null) throw new InvalidDataException("El archivo no contiene tareas válidas.");
+        TareaSnapshot copia = repositorio.LeerCopia(ruta);
         tareas.Clear();
-        foreach (var tarea in datos)
+        foreach (var tarea in copia.Tareas)
         {
-            if (tarea.Id == Guid.Empty) tarea.Id = Guid.NewGuid();
-            tarea.FechasCompletadas ??= new List<DateTime>();
-            tarea.Proyecto ??= "";
+            Normalizar(tarea);
             tareas.Add(tarea);
         }
         proyectos.Clear();
-        proyectos.AddRange(proyectosCopia.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.CurrentCultureIgnoreCase));
+        proyectos.AddRange(copia.Proyectos
+            .Where(nombre => !string.IsNullOrWhiteSpace(nombre))
+            .Distinct(StringComparer.CurrentCultureIgnoreCase));
         foreach (string nombre in tareas.Select(t => t.Proyecto).Where(p => !string.IsNullOrWhiteSpace(p)))
             if (!proyectos.Contains(nombre, StringComparer.CurrentCultureIgnoreCase)) proyectos.Add(nombre);
         Guardar();
-    }
-
-    private void GuardarProyectos()
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(RutaProyectos)!);
-        string temporal = RutaProyectos + ".tmp";
-        File.WriteAllText(temporal, JsonSerializer.Serialize(proyectos));
-        File.Move(temporal, RutaProyectos, overwrite: true);
     }
 
     public void Anadir(Tarea tarea)
@@ -228,71 +178,13 @@ public sealed class TareaController
         Guardar();
     }
 
-    public int PendientesHoy() => ObtenerParaDia(DateTime.Today).Count(t => !t.Hecha);
+    public int PendientesHoy() => TareaService.PendientesHoy(tareas);
 
-    public List<Tarea> ObtenerParaDia(DateTime dia)
-    {
-        dia = dia.Date;
+    public List<Tarea> ObtenerParaDia(DateTime dia) => TareaService.ObtenerParaDia(tareas, dia);
 
-        var ocurrencias = tareas
-            .SelectMany(t => ObtenerOcurrencias(t, dia))
-            .ToList();
+    public bool TieneTareas(DateTime dia) => TareaService.TieneTareas(tareas, dia);
 
-        var importantes = ocurrencias.Where(t => EsDestacada(t, dia) && !t.Hecha).OrderBy(t => t.Fecha);
-        var delDia = ocurrencias.Where(t => !EsDestacada(t, dia) || (t.Hecha && t.Fecha.Date == dia))
-            .OrderBy(t => t.ConHora ? t.Fecha.TimeOfDay : TimeSpan.FromDays(1));
-        return importantes.Concat(delDia).ToList();
-    }
-
-    public bool TieneTareas(DateTime dia) => ObtenerParaDia(dia).Any(t => !t.Hecha);
-
-    IEnumerable<Tarea> ObtenerOcurrencias(Tarea tarea, DateTime dia)
-    {
-        if (tarea.Recurrencia == RecurrenciaTarea.Ninguna)
-        {
-            // Las tareas importantes se arrastran desde su creación hasta la fecha límite,
-            // pero no deben marcar como ocupados los días posteriores a esa fecha.
-            if (tarea.Fecha.Date == dia ||
-                (tarea.Importante && dia >= tarea.Creada.Date && dia <= tarea.Fecha.Date))
-                yield return tarea;
-            yield break;
-        }
-
-        if (dia < tarea.Fecha.Date) yield break;
-        bool coincide = tarea.Recurrencia switch
-        {
-            RecurrenciaTarea.Diaria => true,
-            RecurrenciaTarea.Semanal => (dia - tarea.Fecha.Date).Days % 7 == 0,
-            RecurrenciaTarea.Mensual => dia.Day == Math.Min(tarea.Fecha.Day, DateTime.DaysInMonth(dia.Year, dia.Month)),
-            _ => false
-        };
-        if (!coincide) yield break;
-
-        var copia = new Tarea
-        {
-            Id = tarea.Id,
-            Titulo = tarea.Titulo,
-            Fecha = dia.Add(tarea.Fecha.TimeOfDay),
-            ConHora = tarea.ConHora,
-            Importante = tarea.Importante,
-            Proyecto = tarea.Proyecto,
-            Creada = tarea.Creada,
-            Hecha = tarea.FechasCompletadas.Any(f => f.Date == dia),
-            Recurrencia = tarea.Recurrencia,
-            FechasCompletadas = tarea.FechasCompletadas
-        };
-        yield return copia;
-    }
-
-    public static bool EsDestacada(Tarea tarea, DateTime dia) =>
-        tarea.Importante && dia.Date >= tarea.Creada.Date && dia.Date <= tarea.Fecha.Date;
-
-    private sealed class CopiaTareas
-    {
-        public CopiaTareas() { }
-        public List<Tarea> Tareas { get; set; } = new();
-        public List<string> Proyectos { get; set; } = new();
-    }
+    public static bool EsDestacada(Tarea tarea, DateTime dia) => TareaService.EsDestacada(tarea, dia);
 }
 
 public sealed record ProyectoEliminado(string Nombre, Dictionary<Guid, string> Asignaciones);

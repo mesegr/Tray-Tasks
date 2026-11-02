@@ -12,4 +12,7 @@ public interface ITareaRepository
     TareaSnapshot LeerCopia(string ruta);
 }
 
-public sealed record TareaSnapshot(List<Tarea> Tareas, List<string> Proyectos);
+public sealed record TareaSnapshot(
+    List<Tarea> Tareas,
+    List<string> Proyectos,
+    IReadOnlyList<string>? AdvertenciasRecuperacion = null);

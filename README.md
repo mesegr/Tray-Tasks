@@ -22,12 +22,15 @@ Windows puede mostrar un aviso de SmartScreen al ejecutar una descarga nueva que
 
 Las tareas y proyectos se guardan localmente en `%AppData%\TareasBandeja`. La aplicación no necesita una cuenta ni sincroniza los datos con un servicio en la nube. Usa **Exportar copia…** desde el menú de la bandeja para crear una copia de seguridad.
 
+El formato de las copias, la recuperación desde respaldos y la ubicación de los registros se describen en [Datos locales y copias de seguridad](GestorTareas/GestorTareas/docs/datos-y-copias.md).
+
 ## Compilar desde el código
 
 Se necesita el SDK de .NET 10 y Windows:
 
 ```powershell
 dotnet build GestorTareas/GestorTareas.slnx -c Release
+dotnet test GestorTareas/GestorTareas.slnx -c Release
 ```
 
 Para generar el paquete autocontenido de 64 bits:

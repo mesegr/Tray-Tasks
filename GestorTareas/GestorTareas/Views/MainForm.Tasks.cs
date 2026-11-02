@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using TareasBandeja.Controllers;
+using TareasBandeja.Diagnostics;
 using TareasBandeja.Models;
 
 namespace TareasBandeja.Views;
@@ -303,6 +304,7 @@ public partial class MainForm
         }
         catch (Exception ex)
         {
+            AppLogger.Error("No se pudo restaurar la copia de seguridad seleccionada.", ex);
             MessageBox.Show(this, "No se pudo restaurar la copia: " + ex.Message, "Error al restaurar", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }

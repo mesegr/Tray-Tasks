@@ -2,6 +2,7 @@ using System.Drawing.Drawing2D;
 using System.Media;
 using System.Runtime.InteropServices;
 using System.Text;
+using TareasBandeja.Diagnostics;
 
 namespace TareasBandeja.Views;
 
@@ -224,9 +225,9 @@ internal static class NotificationSound
             mciSendString($"open \"{rutaMp3}\" type mpegvideo alias {Alias}", null, 0, IntPtr.Zero);
             mciSendString($"play {Alias}", null, 0, IntPtr.Zero);
         }
-        catch
+        catch (Exception ex)
         {
-            // Una notificación nunca debe fallar porque el dispositivo de audio no esté disponible.
+            AppLogger.Advertencia("No se pudo reproducir el sonido de una notificación.", ex);
         }
     }
 

@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using TareasBandeja.Diagnostics;
 
 namespace TareasBandeja.Views;
 
@@ -16,9 +17,9 @@ public partial class MainForm
             else
                 clave?.DeleteValue(NombreApp, false);
         }
-        catch
+        catch (Exception ex)
         {
-            // Si no se puede escribir en el registro, la app sigue funcionando igual
+            AppLogger.Advertencia("No se pudo actualizar el inicio automático de Windows.", ex);
         }
     }
 
@@ -50,7 +51,7 @@ public partial class MainForm
             ubicacionNotificaciones = Math.Clamp(Convert.ToInt32(clave?.GetValue("UbicacionNotificaciones") ?? 0), 0, 3);
             mostrarVentanaAlIniciar = Convert.ToInt32(clave?.GetValue("MostrarAlIniciar") ?? 0) != 0;
         }
-        catch { }
+        catch (Exception ex) { AppLogger.Advertencia("No se pudieron cargar las preferencias; se usarán los valores predeterminados.", ex); }
         Notificador.DuracionAviso = duracionNotificacion;
         Notificador.Posicion = ubicacionNotificaciones;
         panelAjustes.CargarPreferencias(avisosPreviosMinutos, duracionNotificacion, sonidoHabilitado,
@@ -71,7 +72,7 @@ public partial class MainForm
             clave?.SetValue("UbicacionNotificaciones", ubicacionNotificaciones, RegistryValueKind.DWord);
             clave?.SetValue("MostrarAlIniciar", mostrarVentanaAlIniciar ? 1 : 0, RegistryValueKind.DWord);
         }
-        catch { }
+        catch (Exception ex) { AppLogger.Advertencia("No se pudieron guardar las preferencias.", ex); }
     }
 
     void AplicarTema(bool claro)
@@ -117,8 +118,9 @@ public partial class MainForm
             if (tecla == Keys.None || modificadores == 0) throw new InvalidDataException();
             return new ConfiguracionAtajo(modificadores, tecla);
         }
-        catch
+        catch (Exception ex)
         {
+            AppLogger.Advertencia("No se pudo leer el atajo de teclado guardado; se usará el atajo predeterminado.", ex);
             return new ConfiguracionAtajo(MOD_CONTROL | MOD_ALT, Keys.T);
         }
     }
@@ -131,9 +133,9 @@ public partial class MainForm
             clave?.SetValue("HotkeyModifiers", config.Modificadores, RegistryValueKind.DWord);
             clave?.SetValue("HotkeyKey", (int)config.Tecla, RegistryValueKind.DWord);
         }
-        catch
+        catch (Exception ex)
         {
-            // La app sigue funcionando aunque Windows no permita guardar el ajuste.
+            AppLogger.Advertencia("No se pudo guardar el atajo de teclado.", ex);
         }
     }
 

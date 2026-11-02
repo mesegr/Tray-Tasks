@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Win32;
 using TareasBandeja.Controllers;
+using TareasBandeja.Diagnostics;
 using TareasBandeja.Models;
 
 namespace TareasBandeja.Views;
@@ -488,10 +489,18 @@ public partial class MainForm : Form
         try
         {
             controller.Cargar();
+            if (controller.AdvertenciasRecuperacion.Count > 0)
+            {
+                MessageBox.Show(
+                    string.Join(Environment.NewLine, controller.AdvertenciasRecuperacion) +
+                    $"{Environment.NewLine}{Environment.NewLine}Puedes revisar los detalles en: {AppLogger.RutaLogs}",
+                    "TrayTasks recuperó datos", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
         catch (Exception ex)
         {
-            MessageBox.Show("No se pudieron cargar las tareas: " + ex.Message);
+            throw new InvalidOperationException(
+                $"No se pudieron cargar los datos. Para evitar sobrescribirlos, TrayTasks se cerrará. Registro: {AppLogger.RutaLogs}", ex);
         }
         ActualizarSelectorProyectos();
         ActualizarChipFecha();
